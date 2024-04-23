@@ -3,7 +3,7 @@
 # This software is licensed under the Apache License version 2.
 #
 
-FROM ubuntu:16.04
+FROM ubuntu:22.04
 LABEL maintainer="support@datastrato.com"
 
 ARG HADOOP_PACKAGE_NAME
@@ -23,12 +23,12 @@ RUN apt-get update && apt-get upgrade -y && apt-get install --fix-missing -yq \
   libsasl2-dev \
   libsasl2-modules-gssapi-mit \
   libsqlite3-dev \
-  libtidy-0.99-0 \
+  libtidy-dev \
   libxml2-dev \
   libxslt-dev \
   libffi-dev \
   libldap2-dev \
-  python-dev \
+  python-dev-is-python3 \
   python-setuptools \
   libgmp3-dev \
   libz-dev \
