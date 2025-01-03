@@ -234,7 +234,7 @@ fn path_in_dir(dir: &Path, path: &Path) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::config::AppConfig;
     use crate::default_raw_filesystem::DefaultRawFileSystem;
