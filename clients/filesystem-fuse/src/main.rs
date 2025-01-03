@@ -26,15 +26,23 @@ use tokio::signal;
 async fn main() -> fuse3::Result<()> {
     tracing_subscriber::fmt().init();
 
+    // todo need inmprove the args parsing
+    let args: Vec<String> = std::env::args().collect();
+    let (mount_point, mount_from, config_path) = match args.len() {
+        3 => (args[1].as_str(), args[2].as_str(), args[3].as_str()),
+        _ => {
+            error!("Usage: {} <mount_point> <mount_from> <config>", args[0]);
+            return Err(Errno::from(libc::EINVAL));
+        }
+    };
+
     //todo(read config file from args)
-    let config = AppConfig::from_file(Some("conf/gvfs_fuse.toml"));
+    let config = AppConfig::from_file(Some(config_path));
     if let Err(e) = &config {
         error!("Failed to load config: {:?}", e);
         return Err(Errno::from(libc::EINVAL));
     }
     let config = config.unwrap();
-    let mount_point = "gvfs";
-    let mount_from = "gvfs://fileset/test/c1/s1/fileset1";
     let handle = tokio::spawn(async move {
         let result = gvfs_mount(mount_point, mount_from, &config).await;
         if let Err(e) = result {
