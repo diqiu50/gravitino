@@ -199,8 +199,15 @@ mod tests {
         let file_set = Fileset::new("fileset1", &file_set_location);
         let config = AppConfig::from_file(Some("tests/conf/gvfs_fuse_s3.toml")).unwrap();
         let fs_context = FileSystemContext::default();
-        let inner_fs=  create_fs_with_fileset(&catalog, &file_set, &config, &fs_context).unwrap();
-        GravitinoFilesetFileSystem::new(inner_fs, path, GravitinoClient::new(&config.gravitino), &config, &fs_context).await
+        let inner_fs = create_fs_with_fileset(&catalog, &file_set, &config, &fs_context).unwrap();
+        GravitinoFilesetFileSystem::new(
+            inner_fs,
+            path,
+            GravitinoClient::new(&config.gravitino),
+            &config,
+            &fs_context,
+        )
+        .await
     }
 
     #[tokio::test]
@@ -211,7 +218,7 @@ mod tests {
         let cwd = Path::new("/gvfs_test3");
         let fs = create_fileset_fs(cwd).await;
         let _ = fs.init().await;
-        let mut tester = TestPathFileSystem::new(cwd, fs);
+        let mut tester = TestPathFileSystem::new(Path::new("/"), fs);
         tester.test_path_file_system().await;
     }
 
@@ -229,7 +236,7 @@ mod tests {
             &FileSystemContext::default(),
         );
         let _ = raw_fs.init().await;
-        let mut tester = TestRawFileSystem::new(cwd, raw_fs);
+        let mut tester = TestRawFileSystem::new(Path::new("/"), raw_fs);
         tester.test_raw_file_system().await;
     }
 }
