@@ -19,6 +19,7 @@
 use crate::config::AppConfig;
 use crate::utils::GvfsResult;
 
+mod command_args;
 pub mod config;
 mod default_raw_filesystem;
 mod error;
