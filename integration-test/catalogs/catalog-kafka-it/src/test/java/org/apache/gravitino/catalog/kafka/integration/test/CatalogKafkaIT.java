@@ -18,9 +18,6 @@
  */
 package org.apache.gravitino.catalog.kafka.integration.test;
 
-import static org.apache.gravitino.catalog.kafka.KafkaCatalogPropertiesMetadata.BOOTSTRAP_SERVERS;
-import static org.apache.gravitino.catalog.kafka.KafkaTopicPropertiesMetadata.PARTITION_COUNT;
-import static org.apache.gravitino.catalog.kafka.KafkaTopicPropertiesMetadata.REPLICATION_FACTOR;
 import static org.apache.gravitino.connector.BaseCatalog.CATALOG_BYPASS_PREFIX;
 import static org.apache.gravitino.integration.test.container.KafkaContainer.DEFAULT_BROKER_PORT;
 
@@ -74,6 +71,11 @@ import org.slf4j.LoggerFactory;
 @Tag("gravitino-docker-test")
 public class CatalogKafkaIT extends BaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(CatalogKafkaIT.class);
+
+  private final String KAFKA_BOOTSTRAP_SERVERS = "bootstrap.servers";
+  private final String KAFKA_PARTITION_COUNT = "partition.count";
+  private final String KAFKA_REPLICATION_FACTOR = "replication.factor";
+
   private static final ContainerSuite CONTAINER_SUITE = ContainerSuite.getInstance();
   private static final String METALAKE_NAME =
       GravitinoITUtils.genRandomName("catalogKafkaIT_metalake");
@@ -93,7 +95,8 @@ public class CatalogKafkaIT extends BaseIT {
         String.format(
             "%s:%d",
             CONTAINER_SUITE.getKafkaContainer().getContainerIpAddress(), DEFAULT_BROKER_PORT);
-    adminClient = AdminClient.create(ImmutableMap.of(BOOTSTRAP_SERVERS, kafkaBootstrapServers));
+    adminClient =
+        AdminClient.create(ImmutableMap.of(KAFKA_BOOTSTRAP_SERVERS, kafkaBootstrapServers));
 
     // create topics for testing
     adminClient
@@ -107,7 +110,7 @@ public class CatalogKafkaIT extends BaseIT {
 
     createMetalake();
     Map<String, String> properties = Maps.newHashMap();
-    properties.put(BOOTSTRAP_SERVERS, kafkaBootstrapServers);
+    properties.put(KAFKA_BOOTSTRAP_SERVERS, kafkaBootstrapServers);
     catalog = createCatalog(CATALOG_NAME, "Kafka catalog for IT", properties);
   }
 
@@ -144,7 +147,7 @@ public class CatalogKafkaIT extends BaseIT {
     String catalogName = GravitinoITUtils.genRandomName("test_catalog");
     String comment = "test catalog";
     Map<String, String> properties =
-        ImmutableMap.of(BOOTSTRAP_SERVERS, kafkaBootstrapServers, "key1", "value1");
+        ImmutableMap.of(KAFKA_BOOTSTRAP_SERVERS, kafkaBootstrapServers, "key1", "value1");
 
     // test before creation
     Assertions.assertDoesNotThrow(
@@ -157,7 +160,7 @@ public class CatalogKafkaIT extends BaseIT {
     Assertions.assertEquals(catalogName, createdCatalog.name());
     Assertions.assertEquals(comment, createdCatalog.comment());
     Assertions.assertEquals(
-        kafkaBootstrapServers, createdCatalog.properties().get(BOOTSTRAP_SERVERS));
+        kafkaBootstrapServers, createdCatalog.properties().get(KAFKA_BOOTSTRAP_SERVERS));
 
     // test load catalog
     Catalog loadedCatalog = metalake.loadCatalog(catalogName);
@@ -197,7 +200,7 @@ public class CatalogKafkaIT extends BaseIT {
             Catalog.Type.MESSAGING,
             PROVIDER,
             "comment",
-            ImmutableMap.of(BOOTSTRAP_SERVERS, "2"));
+            ImmutableMap.of(KAFKA_BOOTSTRAP_SERVERS, "2"));
     Exception exception =
         Assertions.assertThrows(
             IllegalArgumentException.class, () -> catalog1.asSchemas().listSchemas());
@@ -246,7 +249,7 @@ public class CatalogKafkaIT extends BaseIT {
             PROVIDER,
             "comment",
             ImmutableMap.of(
-                BOOTSTRAP_SERVERS,
+                KAFKA_BOOTSTRAP_SERVERS,
                 "192.0.2.1:9999",
                 CATALOG_BYPASS_PREFIX + AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG,
                 "3000",
@@ -349,8 +352,8 @@ public class CatalogKafkaIT extends BaseIT {
                 ImmutableMap.of(TopicConfig.RETENTION_MS_CONFIG, "43200000"));
 
     Assertions.assertEquals("comment", createdTopic.comment());
-    Assertions.assertEquals("1", createdTopic.properties().get(PARTITION_COUNT));
-    Assertions.assertEquals("1", createdTopic.properties().get(REPLICATION_FACTOR));
+    Assertions.assertEquals("1", createdTopic.properties().get(KAFKA_PARTITION_COUNT));
+    Assertions.assertEquals("1", createdTopic.properties().get(KAFKA_REPLICATION_FACTOR));
     Assertions.assertEquals(
         "43200000", createdTopic.properties().get(TopicConfig.RETENTION_MS_CONFIG));
 
@@ -361,17 +364,17 @@ public class CatalogKafkaIT extends BaseIT {
             .alterTopic(
                 NameIdentifier.of(DEFAULT_SCHEMA_NAME, topicName),
                 TopicChange.updateComment("new comment"),
-                TopicChange.setProperty(PARTITION_COUNT, "3"),
+                TopicChange.setProperty(KAFKA_PARTITION_COUNT, "3"),
                 TopicChange.removeProperty(TopicConfig.RETENTION_MS_CONFIG));
     Topic loadedTopic =
         catalog.asTopicCatalog().loadTopic(NameIdentifier.of(DEFAULT_SCHEMA_NAME, topicName));
 
     Assertions.assertEquals("new comment", alteredTopic.comment());
-    Assertions.assertEquals("3", alteredTopic.properties().get(PARTITION_COUNT));
+    Assertions.assertEquals("3", alteredTopic.properties().get(KAFKA_PARTITION_COUNT));
     Assertions.assertNull(alteredTopic.properties().get(TopicConfig.RETENTION_MS_CONFIG));
 
     Assertions.assertEquals("new comment", loadedTopic.comment());
-    Assertions.assertEquals("3", loadedTopic.properties().get(PARTITION_COUNT));
+    Assertions.assertEquals("3", loadedTopic.properties().get(KAFKA_PARTITION_COUNT));
     // retention.ms overridden was removed, so it should be the default value
     Assertions.assertEquals(
         "604800000", loadedTopic.properties().get(TopicConfig.RETENTION_MS_CONFIG));
@@ -457,16 +460,17 @@ public class CatalogKafkaIT extends BaseIT {
             Catalog.Type.MESSAGING,
             PROVIDER,
             "comment",
-            ImmutableMap.of(BOOTSTRAP_SERVERS, "wrong_address"));
-    Assertions.assertEquals("wrong_address", catalog1.properties().get(BOOTSTRAP_SERVERS));
+            ImmutableMap.of(KAFKA_BOOTSTRAP_SERVERS, "wrong_address"));
+    Assertions.assertEquals("wrong_address", catalog1.properties().get(KAFKA_BOOTSTRAP_SERVERS));
 
     // alter catalog properties
     Catalog alteredCatalog =
         metalake.alterCatalog(
-            catalogName1, CatalogChange.setProperty(BOOTSTRAP_SERVERS, "right_address"));
+            catalogName1, CatalogChange.setProperty(KAFKA_BOOTSTRAP_SERVERS, "right_address"));
 
-    Assertions.assertEquals("right_address", alteredCatalog.properties().get(BOOTSTRAP_SERVERS));
-    Assertions.assertTrue(alteredCatalog.properties().containsKey(BOOTSTRAP_SERVERS));
+    Assertions.assertEquals(
+        "right_address", alteredCatalog.properties().get(KAFKA_BOOTSTRAP_SERVERS));
+    Assertions.assertTrue(alteredCatalog.properties().containsKey(KAFKA_BOOTSTRAP_SERVERS));
   }
 
   private void assertTopicWithKafka(Topic createdTopic)
@@ -474,10 +478,10 @@ public class CatalogKafkaIT extends BaseIT {
     // get topic from Kafka directly
     TopicDescription topicDesc = getTopicDesc(createdTopic.name());
     Assertions.assertEquals(
-        Integer.parseInt(createdTopic.properties().get(PARTITION_COUNT)),
+        Integer.parseInt(createdTopic.properties().get(KAFKA_PARTITION_COUNT)),
         topicDesc.partitions().size());
     Assertions.assertEquals(
-        Integer.parseInt(createdTopic.properties().get(REPLICATION_FACTOR)),
+        Integer.parseInt(createdTopic.properties().get(KAFKA_REPLICATION_FACTOR)),
         topicDesc.partitions().get(0).replicas().size());
 
     // get properties from Kafka directly

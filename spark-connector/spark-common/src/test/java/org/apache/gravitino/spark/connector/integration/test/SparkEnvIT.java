@@ -30,6 +30,7 @@ import org.apache.gravitino.Catalog;
 import org.apache.gravitino.client.GravitinoMetalake;
 import org.apache.gravitino.integration.test.container.ContainerSuite;
 import org.apache.gravitino.integration.test.container.HiveContainer;
+import org.apache.gravitino.integration.test.util.DisabledIfEmbedded;
 import org.apache.gravitino.server.web.JettyServerConfig;
 import org.apache.gravitino.spark.connector.GravitinoSparkConfig;
 import org.apache.gravitino.spark.connector.iceberg.IcebergPropertiesConstants;
@@ -47,7 +48,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Setup Hive, Gravitino, Spark, Metalake environment to execute SparkSQL. */
-@DisabledIf("org.apache.gravitino.integration.test.util.ITUtils#isEmbedded")
+@DisabledIfEmbedded
 public abstract class SparkEnvIT extends SparkUtilIT {
 
   private static final Logger LOG = LoggerFactory.getLogger(SparkEnvIT.class);

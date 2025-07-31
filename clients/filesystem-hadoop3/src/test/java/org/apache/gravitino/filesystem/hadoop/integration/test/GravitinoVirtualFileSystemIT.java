@@ -42,6 +42,7 @@ import org.apache.gravitino.filesystem.hadoop.GravitinoVirtualFileSystemConfigur
 import org.apache.gravitino.integration.test.container.ContainerSuite;
 import org.apache.gravitino.integration.test.container.HiveContainer;
 import org.apache.gravitino.integration.test.util.BaseIT;
+import org.apache.gravitino.integration.test.util.DisabledIfEmbedded;
 import org.apache.gravitino.integration.test.util.GravitinoITUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -59,7 +60,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Tag("gravitino-docker-test")
-@DisabledIf("org.apache.gravitino.integration.test.util.ITUtils#isEmbedded")
+@DisabledIfEmbedded
 public class GravitinoVirtualFileSystemIT extends BaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(GravitinoVirtualFileSystemIT.class);
   protected static final ContainerSuite containerSuite = ContainerSuite.getInstance();

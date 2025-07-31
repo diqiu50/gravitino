@@ -18,12 +18,13 @@
  */
 package org.apache.gravitino.filesystem.hadoop.integration.test;
 
+import org.apache.gravitino.integration.test.util.DisabledIfEmbedded;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.condition.DisabledIf;
 
 @Tag("gravitino-docker-test")
-@DisabledIf("org.apache.gravitino.integration.test.util.ITUtils#isEmbedded")
+@DisabledIfEmbedded
 public class GravitinoVirtualFilesystemWithFSOpsDisabledIT extends GravitinoVirtualFileSystemIT {
 
   @BeforeAll

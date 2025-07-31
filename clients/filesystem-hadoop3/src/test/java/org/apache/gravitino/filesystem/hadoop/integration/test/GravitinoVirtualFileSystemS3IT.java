@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.catalog.hadoop.fs.FileSystemUtils;
 import org.apache.gravitino.integration.test.container.GravitinoLocalStackContainer;
+import org.apache.gravitino.integration.test.util.DisabledIfEmbedded;
 import org.apache.gravitino.integration.test.util.GravitinoITUtils;
 import org.apache.gravitino.s3.fs.S3FileSystemProvider;
 import org.apache.gravitino.storage.S3Properties;
@@ -44,7 +45,7 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.Container;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 
-@DisabledIf("org.apache.gravitino.integration.test.util.ITUtils#isEmbedded")
+@DisabledIfEmbedded
 public class GravitinoVirtualFileSystemS3IT extends GravitinoVirtualFileSystemIT {
   private static final Logger LOG = LoggerFactory.getLogger(GravitinoVirtualFileSystemS3IT.class);
 
