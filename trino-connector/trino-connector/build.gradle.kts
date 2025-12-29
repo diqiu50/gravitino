@@ -33,19 +33,18 @@ dependencies {
   implementation(libs.bundles.log4j)
   implementation(libs.commons.collections4)
   implementation(libs.commons.lang3)
-  implementation(libs.trino.jdbc)
   compileOnly(libs.airlift.resolver)
-  compileOnly(libs.trino.spi) {
+  compileOnly("io.trino:trino-spi:478") {
     exclude("org.apache.logging.log4j")
   }
   testImplementation(libs.awaitility)
   testImplementation(libs.mockito.core)
   testImplementation(libs.mysql.driver)
-  testImplementation(libs.trino.memory) {
+  testImplementation("io.trino:trino-memory:478") {
     exclude("org.antlr")
     exclude("org.apache.logging.log4j")
   }
-  testImplementation(libs.trino.testing) {
+  testImplementation("io.trino:trino-testing:478") {
     exclude("org.apache.logging.log4j")
   }
   testRuntimeOnly(libs.junit.jupiter.engine)
