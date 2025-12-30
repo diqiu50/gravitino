@@ -22,6 +22,7 @@ import static io.trino.testing.TestingSession.testSessionBuilder;
 import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
 
 import com.google.common.base.Preconditions;
 import io.trino.Session;
@@ -40,7 +41,9 @@ import org.apache.gravitino.client.GravitinoAdminClient;
 import org.apache.gravitino.trino.connector.catalog.CatalogConnectorManager;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 
+@TestInstance(PER_CLASS)
 public class TestGravitinoConnector extends AbstractTestQueryFramework {
 
   GravitinoMockServer server;
@@ -54,7 +57,7 @@ public class TestGravitinoConnector extends AbstractTestQueryFramework {
     try {
 
       DistributedQueryRunner queryRunner =
-          DistributedQueryRunner.builder(session).setNodeCount(1).build();
+          DistributedQueryRunner.builder(session).setWorkerCount(1).build();
 
       TestGravitinoPlugin gravitinoPlugin = new TestGravitinoPlugin(gravitinoClient);
       queryRunner.installPlugin(gravitinoPlugin);

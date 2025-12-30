@@ -69,7 +69,9 @@ public final class BlockJsonSerde {
       SliceOutput output =
           new DynamicSliceOutput(
               toIntExact(
-                  block.getSizeInBytes() + block.getEncodingName().length() + (2 * Integer.BYTES)));
+                  block.getSizeInBytes()
+                      + (2 * Integer.BYTES)
+                      + 1024 /* buffer for encoding metadata */));
 
       try {
         writeBlock.invoke(null, blockEncodingSerde, output, block);

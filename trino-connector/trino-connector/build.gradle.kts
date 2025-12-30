@@ -34,6 +34,9 @@ dependencies {
   implementation(libs.commons.collections4)
   implementation(libs.commons.lang3)
   compileOnly(libs.airlift.resolver)
+  implementation("io.trino:trino-jdbc:478") {
+    exclude("org.apache.logging.log4j")
+  }
   compileOnly("io.trino:trino-spi:478") {
     exclude("org.apache.logging.log4j")
   }
@@ -43,10 +46,19 @@ dependencies {
   testImplementation("io.trino:trino-memory:478") {
     exclude("org.antlr")
     exclude("org.apache.logging.log4j")
+    exclude(group = "org.junit.jupiter")
+    exclude(group = "org.junit.platform")
+    exclude(group = "org.junit.vintage")
+    exclude(group = "junit")
   }
   testImplementation("io.trino:trino-testing:478") {
     exclude("org.apache.logging.log4j")
+    exclude(group = "org.junit.jupiter")
+    exclude(group = "org.junit.platform")
+    exclude(group = "org.junit.vintage")
+    exclude(group = "junit")
   }
+  testImplementation(libs.junit.jupiter.api)
   testRuntimeOnly(libs.junit.jupiter.engine)
 }
 

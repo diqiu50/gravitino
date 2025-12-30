@@ -50,8 +50,7 @@ public final class TypeSignatureDeserializer extends FromStringDeserializer<Type
   @Override
   protected TypeSignature _deserialize(String value, DeserializationContext context) {
     try {
-      return (TypeSignature)
-          parseTypeSignatureMethod.invoke(null, value, ImmutableSet.of());
+      return (TypeSignature) parseTypeSignatureMethod.invoke(null, value, ImmutableSet.of());
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
