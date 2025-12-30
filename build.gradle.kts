@@ -376,13 +376,11 @@ subprojects {
     toolchain {
       // Some JDK vendors like Homebrew installed OpenJDK 17 have problems in building trino-connector:
       // It will cause tests of Trino-connector hanging forever on macOS, to avoid this issue and
-      // other vendor-related problems, Gravitino will use the specified AMAZON OpenJDK 17 to build
-      // Trino-connector on macOS.
+      // other vendor-related problems (and to make toolchain provisioning more stable), Gravitino
+      // will use the specified AMAZON OpenJDK to build Trino-connector.
       if (project.name == "trino-connector") {
-        if (OperatingSystem.current().isMacOsX) {
-          vendor.set(JvmVendorSpec.AMAZON)
-        }
-        languageVersion.set(JavaLanguageVersion.of(17))
+        vendor.set(JvmVendorSpec.AMAZON)
+        languageVersion.set(JavaLanguageVersion.of(24))
       } else if (compatibleWithJDK8(project)) {
         languageVersion.set(JavaLanguageVersion.of(17))
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -417,43 +415,47 @@ subprojects {
   }
 
   tasks.withType<JavaCompile>().configureEach {
-    options.errorprone.isEnabled.set(true)
-    options.errorprone.disableWarningsInGeneratedCode.set(true)
-    options.errorprone.disable(
-      "AlmostJavadoc",
-      "CanonicalDuration",
-      "CheckReturnValue",
-      "ComparableType",
-      "ConstantOverflow",
-      "DoubleBraceInitialization",
-      "EqualsUnsafeCast",
-      "EmptyBlockTag",
-      "FutureReturnValueIgnored",
-      "InconsistentCapitalization",
-      "InconsistentHashCode",
-      "JavaTimeDefaultTimeZone",
-      "JdkObsolete",
-      "LockNotBeforeTry",
-      "MissingOverride",
-      "MissingSummary",
-      "MutableConstantField",
-      "NonOverridingEquals",
-      "ObjectEqualsForPrimitives",
-      "OperatorPrecedence",
-      "ReturnValueIgnored",
-      "SameNameButDifferent",
-      "StaticAssignmentInConstructor",
-      "StringSplitter",
-      "ThreadPriorityCheck",
-      "ThrowIfUncheckedKnownChecked",
-      "TypeParameterUnusedInFormals",
-      "UnicodeEscape",
-      "UnnecessaryParentheses",
-      "UnsafeReflectiveConstructionCast",
-      "UnusedMethod",
-      "VariableNameSameAsType",
-      "WaitNotInLoop"
-    )
+    // Trino 478 is built with JDK 24, so the connector module must compile with JDK 24 as well.
+    // Error Prone 2.10.0 is not compatible with javac from JDK 24, so disable it for this module.
+    options.errorprone.isEnabled.set(project.name != "trino-connector")
+    if (project.name != "trino-connector") {
+      options.errorprone.disableWarningsInGeneratedCode.set(true)
+      options.errorprone.disable(
+        "AlmostJavadoc",
+        "CanonicalDuration",
+        "CheckReturnValue",
+        "ComparableType",
+        "ConstantOverflow",
+        "DoubleBraceInitialization",
+        "EqualsUnsafeCast",
+        "EmptyBlockTag",
+        "FutureReturnValueIgnored",
+        "InconsistentCapitalization",
+        "InconsistentHashCode",
+        "JavaTimeDefaultTimeZone",
+        "JdkObsolete",
+        "LockNotBeforeTry",
+        "MissingOverride",
+        "MissingSummary",
+        "MutableConstantField",
+        "NonOverridingEquals",
+        "ObjectEqualsForPrimitives",
+        "OperatorPrecedence",
+        "ReturnValueIgnored",
+        "SameNameButDifferent",
+        "StaticAssignmentInConstructor",
+        "StringSplitter",
+        "ThreadPriorityCheck",
+        "ThrowIfUncheckedKnownChecked",
+        "TypeParameterUnusedInFormals",
+        "UnicodeEscape",
+        "UnnecessaryParentheses",
+        "UnsafeReflectiveConstructionCast",
+        "UnusedMethod",
+        "VariableNameSameAsType",
+        "WaitNotInLoop"
+      )
+    }
   }
 
   tasks.withType<Javadoc> {
@@ -590,7 +592,21 @@ subprojects {
       val extraArgs = project.property("extraJvmArgs") as List<String>
       jvmArgs = listOf("-Xmx4G") + extraArgs
       useJUnitPlatform()
-      finalizedBy(tasks.getByName("jacocoTestReport"))
+      // JaCoCo < 0.8.13 does not support JDK 24 class files (major 68). Since Trino 478 requires
+      // compiling the connector module with JDK 24, disable JaCoCo for this module's unit tests.
+      if (project.name == "trino-connector") {
+        extensions.configure<org.gradle.testing.jacoco.plugins.JacocoTaskExtension> {
+          isEnabled = false
+        }
+      } else {
+        finalizedBy(tasks.getByName("jacocoTestReport"))
+      }
+    }
+  }
+
+  if (project.name == "trino-connector") {
+    tasks.named("jacocoTestReport").configure {
+      enabled = false
     }
   }
 

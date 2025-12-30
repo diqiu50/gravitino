@@ -167,4 +167,166 @@ under the License.
   - 内部反射逻辑按版本段拆分/覆盖
   - 后续再把共用逻辑抽到 common（如需要）
 
+---
+
+## Trino 478 升级实施记录
+
+### 实施方式
+
+**注意**：当前实施采用**直接升级现有模块**的方式，而非创建独立的 `trino-connector-478` 模块。这意味着当前代码库直接支持 Trino 478，后续如需支持多版本段，可参考本方案创建独立模块。
+
+### 版本与依赖升级
+
+#### Trino 版本
+- **从**：Trino 435-439
+- **到**：Trino 478
+- **版本校验常量**：
+  ```java
+  MIN_SUPPORT_TRINO_SPI_VERSION = 478
+  MAX_SUPPORT_TRINO_SPI_VERSION = 478
+  ```
+
+#### JDK 版本要求
+- **trino-connector 模块编译 JDK**：从 JDK 17 升级到 **JDK 24**
+  - Trino 478 使用 JDK 24 编译，connector 必须使用相同 JDK 版本以保证二进制兼容性
+  - 配置位置：`build.gradle.kts` 中 trino-connector 模块的 toolchain 配置
+
+#### 依赖更新
+```kotlin
+// build.gradle.kts
+implementation("io.trino:trino-jdbc:478")
+compileOnly("io.trino:trino-spi:478")
+testImplementation("io.trino:trino-memory:478")
+testImplementation("io.trino:trino-testing:478")
+```
+
+### API 变更适配清单
+
+#### 1. Connector API 变更
+
+| API 变更 | 文件位置 | 说明 |
+|---------|---------|------|
+| `setNodeCount()` → `setWorkerCount()` | `TestGravitinoConnector*.java` | QueryRunner 构建方法变更 |
+| `getNextPage()` → `getNextSourcePage()` 返回 `SourcePage` | `GravitinoSystemConnector.java` | ConnectorPageSource API 变更 |
+| `getSplitBucketFunction()` 新增 `bucketCount` 参数 | `GravitinoNodePartitioningProvider.java` | 方法签名变更 |
+| `addColumn()` 新增 `ColumnPosition` 参数 | `GravitinoMockServer.java` | 必须指定列位置 |
+| 移除 `getInfo()` 方法 | `GravitinoSplit.java`, `GravitinoSystemConnector.java` | ConnectorSplit 接口变更 |
+| 新增 `shutdown()` 方法 | `GravitinoConnector.java`, `GravitinoSystemConnector.java` | Connector 接口新增生命周期方法 |
+
+#### 2. 内部 API 修复
+
+- **移除 `$internal` 包依赖**：
+  - `MySQLPropertyMeta.java`：`io.trino.jdbc.$internal.guava.*` → `com.google.common.*`
+  
+- **反射方法修复**：
+  - `TypeSignatureDeserializer.java`：
+    - 添加 `setAccessible(true)` 设置方法可访问
+    - 修复硬编码问题：使用实际 `value` 参数而非 `"varchar(255)"`
+
+#### 3. 代码逻辑优化
+
+- **CatalogRegister**：
+  - 版本校验逻辑提取为静态方法 `validateTrinoSpiVersion()`，便于测试
+  - 移除 `isCoordinator()` 方法，改用 `context.getCurrentNode().isCoordinator()`
+  - 改进错误处理和日志格式（使用 `{}` 占位符）
+
+- **GravitinoConnector**：
+  - `CatalogConnectorMetadata` 实例化提前到构造函数，避免重复创建
+  - 新增 `shutdown()` 方法清理资源
+
+- **序列化优化**：
+  - `BlockJsonSerde.java`：增加缓冲区大小（+1024 bytes）用于编码元数据
+
+### 构建配置调整
+
+#### 1. Error Prone 禁用
+```kotlin
+// build.gradle.kts
+options.errorprone.isEnabled.set(project.name != "trino-connector")
+```
+- **原因**：Error Prone 2.10.0 不兼容 JDK 24 的 javac
+- **影响范围**：仅 trino-connector 模块
+
+#### 2. JaCoCo 禁用
+```kotlin
+// build.gradle.kts
+if (project.name == "trino-connector") {
+  extensions.configure<JacocoTaskExtension> {
+    isEnabled = false
+  }
+}
+```
+- **原因**：JaCoCo < 0.8.13 不支持 JDK 24 class files (major 68)
+- **影响范围**：仅 trino-connector 模块的单元测试
+
+#### 3. 测试依赖排除
+- 排除 JUnit 4 相关依赖（`junit`, `junit-vintage`, `junit-platform`），统一使用 JUnit 5
+- 添加 `testImplementation(libs.junit.jupiter.api)` 显式依赖
+
+### 测试框架迁移
+
+#### JUnit 4 → JUnit 5 迁移
+
+| 变更项 | 示例 |
+|-------|------|
+| 移除 `@BeforeClass/@AfterClass` | `TestGravitinoConfig.java` |
+| `Assert.*` → `Assertions.*` | `TestHiveDataTypeConverter.java`, `TestPostgreSQLDataTypeTransformer.java` |
+| `Assert.assertThrows` → `Assertions.assertThrows` | 多个测试文件 |
+| 添加 `@Execution(SAME_THREAD)` | `TestGravitinoConnector.java` |
+
+#### 测试用例修复
+
+- **TestGravitinoConnector.testAlterTable**：
+  - 修复列重命名冲突（避免与已存在的列名冲突）
+  - 使用 `assertQueryFails` 验证不支持的操作（如修改列类型、设置表属性）
+
+### 文档更新
+
+- **requirements.md**：更新 Trino 版本要求为 Trino-server-478
+- **configuration.md**：更新版本说明和兼容性警告
+
+### 新增测试
+
+- **TestCatalogRegisterTrinoVersionValidation**：
+  - 测试支持的版本（478）
+  - 测试不支持的版本（435）
+  - 测试跳过版本校验配置
+  - 测试无效 SPI 版本格式
+
+### 主要挑战与解决方案
+
+#### 1. JDK 24 兼容性
+- **问题**：Error Prone 和 JaCoCo 工具不支持 JDK 24
+- **解决**：针对 trino-connector 模块禁用这些工具
+
+#### 2. API 方法签名变更
+- **问题**：多个 SPI 接口方法签名变更
+- **解决**：逐一适配新 API，确保编译和运行时兼容
+
+#### 3. 测试框架迁移
+- **问题**：JUnit 4 到 JUnit 5 的迁移
+- **解决**：系统性地替换断言和注解，确保测试行为一致
+
+#### 4. 内部 API 依赖
+- **问题**：`$internal` 包名依赖不稳定
+- **解决**：移除所有 `$internal` 依赖，改用稳定依赖（如 Guava）
+
+### 后续工作建议
+
+1. **多版本段支持**：
+   - 如需同时支持 Trino 435 和 478，可创建独立的 `trino-connector-478` 模块
+   - 参考本方案文档的"源码复用策略"章节
+
+2. **测试覆盖**：
+   - 增加集成测试验证 Trino 478 的实际运行
+   - 验证所有 Connector 功能在 Trino 478 上的正确性
+
+3. **文档完善**：
+   - 更新用户文档说明 Trino 478 的特定配置要求
+   - 记录已知的兼容性问题和限制
+
+4. **CI/CD 集成**：
+   - 在 CI 中增加 Trino 478 的测试矩阵
+   - 确保每次构建都验证 Trino 478 兼容性
+
 
