@@ -382,7 +382,7 @@ subprojects {
         if (OperatingSystem.current().isMacOsX) {
           vendor.set(JvmVendorSpec.AMAZON)
         }
-        languageVersion.set(JavaLanguageVersion.of(17))
+        languageVersion.set(JavaLanguageVersion.of(22))
       } else if (compatibleWithJDK8(project)) {
         languageVersion.set(JavaLanguageVersion.of(17))
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -590,11 +590,22 @@ subprojects {
       val extraArgs = project.property("extraJvmArgs") as List<String>
       jvmArgs = listOf("-Xmx4G") + extraArgs
       useJUnitPlatform()
-      finalizedBy(tasks.getByName("jacocoTestReport"))
+      if (project.name != "trino-connector") {
+        finalizedBy(tasks.getByName("jacocoTestReport"))
+      }
     }
   }
 
+  if (project.name == "trino-connector") {
+    tasks.withType<Test>().configureEach {
+      // JaCoCo 0.8.9 does not support classfile major 66 (JDK 22); disable agent for this module.
+      extensions.configure<JacocoTaskExtension> { isEnabled = false }
+    }
+    tasks.named("jacocoTestReport").configure { enabled = false }
+  }
+
   tasks.withType<JacocoReport> {
+    enabled = project.name != "trino-connector"
     reports {
       csv.required.set(true)
       xml.required.set(true)

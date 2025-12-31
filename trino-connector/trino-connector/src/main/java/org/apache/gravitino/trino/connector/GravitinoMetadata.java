@@ -257,10 +257,17 @@ public class GravitinoMetadata implements ConnectorMetadata {
   public Optional<ConnectorOutputMetadata> finishInsert(
       ConnectorSession session,
       ConnectorInsertTableHandle insertHandle,
+      List<ConnectorTableHandle> sourceTableHandles,
       Collection<Slice> fragments,
       Collection<ComputedStatistics> computedStatistics) {
+    List<ConnectorTableHandle> unwrappedSources =
+        sourceTableHandles.stream().map(GravitinoHandle::unWrap).collect(Collectors.toList());
     return internalMetadata.finishInsert(
-        session, GravitinoHandle.unWrap(insertHandle), fragments, computedStatistics);
+        session,
+        GravitinoHandle.unWrap(insertHandle),
+        unwrappedSources,
+        fragments,
+        computedStatistics);
   }
 
   @Override
@@ -631,10 +638,17 @@ public class GravitinoMetadata implements ConnectorMetadata {
   public void finishMerge(
       ConnectorSession session,
       ConnectorMergeTableHandle mergeTableHandle,
+      List<ConnectorTableHandle> sourceTableHandles,
       Collection<Slice> fragments,
       Collection<ComputedStatistics> computedStatistics) {
+    List<ConnectorTableHandle> unwrappedSources =
+        sourceTableHandles.stream().map(GravitinoHandle::unWrap).collect(Collectors.toList());
     internalMetadata.finishMerge(
-        session, GravitinoHandle.unWrap(mergeTableHandle), fragments, computedStatistics);
+        session,
+        GravitinoHandle.unWrap(mergeTableHandle),
+        unwrappedSources,
+        fragments,
+        computedStatistics);
   }
 
   @Override

@@ -76,11 +76,6 @@ public class GravitinoSplit implements ConnectorSplit, GravitinoHandle<Connector
   }
 
   @Override
-  public Object getInfo() {
-    return handleWrapper.getHandle().getInfo();
-  }
-
-  @Override
   public SplitWeight getSplitWeight() {
     return handleWrapper.getHandle().getSplitWeight();
   }

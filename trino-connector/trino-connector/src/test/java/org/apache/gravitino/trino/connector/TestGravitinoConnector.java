@@ -54,7 +54,7 @@ public class TestGravitinoConnector extends AbstractTestQueryFramework {
     try {
 
       DistributedQueryRunner queryRunner =
-          DistributedQueryRunner.builder(session).setNodeCount(1).build();
+          DistributedQueryRunner.builder(session).setWorkerCount(1).build();
 
       TestGravitinoPlugin gravitinoPlugin = new TestGravitinoPlugin(gravitinoClient);
       queryRunner.installPlugin(gravitinoPlugin);
@@ -94,6 +94,8 @@ public class TestGravitinoConnector extends AbstractTestQueryFramework {
     assertThat(computeActual("show schemas from " + catalogName).getOnlyColumnAsSet())
         .doesNotContain(schemaName);
 
+    // cleanup before create to avoid conflicts
+    assertUpdate("drop schema if exists " + fullSchemaName + " cascade");
     assertUpdate("create schema " + fullSchemaName);
     assertThat(computeActual("show schemas from \"memory\"").getOnlyColumnAsSet())
         .contains(schemaName);
@@ -189,31 +191,26 @@ public class TestGravitinoConnector extends AbstractTestQueryFramework {
 
     createTestTable(fullTableName1);
 
-    // test add column and drop column, but the memory connector is not supported these operations.
-    assertQueryFails(
-        String.format("alter table %s add column if not exists c varchar", fullTableName1),
-        format("This connector does not support adding columns"));
-
-    assertQueryFails(
-        String.format("alter table %s drop column a", fullTableName1),
-        format("This connector does not support dropping columns"));
+    // test add column
+    assertUpdate(
+        String.format("alter table %s add column if not exists c varchar", fullTableName1));
+    assertThat((String) computeScalar("show create table " + fullTableName1)).contains("c varchar");
 
     // test set table comment
     assertUpdate(String.format("comment on table %s is 'test table comments'", fullTableName1));
     assertThat((String) computeScalar("show create table " + fullTableName1))
         .contains("COMMENT 'test table comments'");
 
-    // test rename column, but the memory connector is not supported these operations.
-    assertQueryFails(
-        String.format("alter table %s rename column a to c ", fullTableName1),
-        format("This connector does not support renaming columns"));
+    // test rename column (avoid collision with newly added column c)
+    assertUpdate(String.format("alter table %s rename column a to d", fullTableName1));
+    assertThat((String) computeScalar("show create table " + fullTableName1)).contains("d varchar");
 
     assertQueryFails(
-        String.format("alter table %s alter column a set DATA TYPE int", fullTableName1),
+        String.format("alter table %s alter column d set DATA TYPE int", fullTableName1),
         format("This connector does not support setting column types"));
 
     // test set column comment
-    assertUpdate(String.format("comment on column %s.a is 'test column comments'", fullTableName1));
+    assertUpdate(String.format("comment on column %s.d is 'test column comments'", fullTableName1));
     assertThat((String) computeScalar("show create table " + fullTableName1))
         .contains("COMMENT 'test column comments'");
 
@@ -278,7 +275,8 @@ public class TestGravitinoConnector extends AbstractTestQueryFramework {
   private TableName createTestTable(String fullTableName) throws Exception {
     TableName tableName = new TableName(fullTableName);
 
-    // create schema and table
+    // cleanup table, ensure schema exists, then create table
+    assertUpdate("drop table if exists " + tableName.fullTableName());
     assertUpdate("create schema if not exists " + tableName.fullSchemaName());
     assertUpdate("create table " + fullTableName + " (a varchar, b int)");
     return tableName;

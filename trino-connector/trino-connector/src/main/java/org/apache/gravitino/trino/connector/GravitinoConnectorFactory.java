@@ -23,10 +23,12 @@ import static org.apache.gravitino.trino.connector.GravitinoErrorCode.GRAVITINO_
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import io.trino.spi.HostAddress;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.Connector;
 import io.trino.spi.connector.ConnectorContext;
 import io.trino.spi.connector.ConnectorFactory;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
 import org.apache.commons.lang3.StringUtils;
@@ -81,7 +83,18 @@ public class GravitinoConnectorFactory implements ConnectorFactory {
   public Connector create(
       String catalogName, Map<String, String> requiredConfig, ConnectorContext context) {
     Preconditions.checkArgument(requiredConfig != null, "requiredConfig is not null");
-    GravitinoConfig config = new GravitinoConfig(requiredConfig);
+    Map<String, String> configMap = new HashMap<>(requiredConfig);
+    if (!configMap.containsKey("discovery.uri")) {
+      HostAddress address = context.getNodeManager().getCurrentNode().getHostAndPort();
+      String hostPort =
+          address.getPort() > 0
+              ? address.toString()
+              : String.format("%s:%d", address.getHostText(), 8080);
+      configMap.put("discovery.uri", "http://" + hostPort);
+    }
+    GravitinoConfig config = new GravitinoConfig(configMap);
+
+    boolean isCoordinator = context.getNodeManager().getCurrentNode().isCoordinator();
 
     synchronized (this) {
       if (catalogConnectorManager == null) {
@@ -92,7 +105,11 @@ public class GravitinoConnectorFactory implements ConnectorFactory {
           catalogConnectorManager =
               new CatalogConnectorManager(catalogRegister, catalogConnectorFactory);
           catalogConnectorManager.config(config, clientProvider().get());
-          catalogConnectorManager.start(context);
+          if (isCoordinator) {
+            catalogConnectorManager.start(context);
+          } else {
+            LOG.info("Skip CatalogRegister initialization on worker node");
+          }
 
           gravitinoSystemTableFactory = new GravitinoSystemTableFactory(catalogConnectorManager);
         } catch (Exception e) {

@@ -166,11 +166,6 @@ public class GravitinoSystemConnector implements Connector {
     public List<HostAddress> getAddresses() {
       return Collections.emptyList();
     }
-
-    @Override
-    public Object getInfo() {
-      return this;
-    }
   }
 
   /** The system table page source. */
