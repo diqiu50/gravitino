@@ -31,7 +31,12 @@ Gravitino trino-connector 当前主要面向 Trino 435–439 版本段，该版�
 - **演进成本**：新增一个版本段的支持应当是“低成本、可控变更”（差异点集中在少量覆盖类/适配层，避免大面积复制）。
 - **稳定性与体验**：保证发布、部署与回归测试流程清晰可维护。
 
+### 方案
+
 ## 模块与源码组织
+1. 将trino-connctor拆分成 trino-connecotr-common模块和trino-connecotr-435-439，trino-connector-440-4xx, xxx. 
+其中trino-connecotr-common中包含 gravitno-trino-connector各版本公共部分的实现。
+
 - **推荐：方案 A（common + 多薄壳模块）**  
   - 抽 `trino-connector-common` 只依赖稳定 SPI/自定义接口。  
   - 各版本段独立模块（示例：`trino-connector-435/440/455/478`）覆写少量差异类（同包同名覆盖或变体实现）。  
