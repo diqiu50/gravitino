@@ -20,9 +20,12 @@ under the License.
 # Trino Connector 多版本支持方案
 
 ## 背景
-Gravitino trino-connector 当前主要面向 Trino 435–439 版本段，该版本段距离社区最新版本已相对滞后（Trino 最新版本已到 479）。随着社区用户逐步迁移到更新的 Trino 版本，connector 需要同步提升兼容范围，以满足更多用户在新版本 Trino 上部署与使用的需求。
+Gravitino Trino-connector 过去主要支持 Trino 435–439 版本段，距离最新社区 Trino 已经滞后（截至 2024/2025 年已至 479+）。
 
-同时，Trino 发布节奏较快、版本迭代频繁，且 SPI 接口与编译/运行所需的 JDK 版本在不同版本段之间变化明显（例如从 JDK17 演进到 JDK21/22/24）。在这种情况下，依赖单一 artifact “强行跨版本兼容”容易引入二进制不兼容与运行时不确定性，因此需要制定清晰的多版本支持策略，在构建、测试与发布层面按版本段管理兼容性。
+随着社区和用户逐步升级，新旧 SPI/API/JDK 的剧烈变化（如 JDK17→21→22→24，SPI 方法签名频繁改动），
+单 artifact 跨大版本兼容会导致严重运行时风险、开发/测试负担急剧增加。
+
+因此，我们采用“分 Trino 版本段多模块独立适配和发布”的模式，以持续涵盖主流（含长期维护版和社区最新）的 Trino 生态，兼顾兼容性和工程可维护性。
 
 ## 目标
 
@@ -31,60 +34,111 @@ Gravitino trino-connector 当前主要面向 Trino 435–439 版本段，该版�
 - **演进成本**：新增一个版本段的支持应当是“低成本、可控变更”（差异点集中在少量覆盖类/适配层，避免大面积复制）。
 - **稳定性与体验**：保证发布、部署与回归测试流程清晰可维护。
 
-### 方案
+### 方案概述
 
-## 模块与源码组织
-1. 将trino-connctor拆分成 trino-connecotr-common模块和trino-connecotr-435-439，trino-connector-440-4xx, xxx. 
-其中trino-connecotr-common中包含 gravitno-trino-connector各版本公共部分的实现。
+#### 多模块分层结构
+
+将 `trino-connector` 拆分为：
+- `trino-connector-common`：承载稳定接口、共享逻辑（只依赖 Trino 官方稳定 SPI/API），存放绝大多数通用逻辑、通用测试基类；
+- `trino-connector-435-439/440-455/456-469/470-478/...`：每个版本段一个子模块，依赖自己目标段对应的 Trino SPI/JDK。
+
+目录结构示例：
 
 ```text
 trino-connector/
- ├── trino-connector-common/        # 公共代码与接口
- ├── trino-connector-435-439/           # 435–439 版本段
- ├── trino-connector-440-455/           # 440 版本段
- ├── trino-connector-456-469/           # 456 版本段
- └── trino-connector-470-478/           # 470 版本段
+ ├── trino-connector-common/       # 核心与共性逻辑、测试基类
+ ├── trino-connector-435-439/      # 435–439 版本段（举例）
+ ├── trino-connector-440-455/      # 440–455 版本段
+ ├── trino-connector-456-469/      # 456–469 版本段
+ └── trino-connector-470-478/      # 470–478 版本段
 ```
-这里假设有四个版本段需要支持，实际可根据需要增减。
 
-`trino-connector-common` 只依赖稳定SPI/自定义接口, 以及Gravitino Trino connector的核心实现，以及测试的公共部分
-`各版本段独立模块` 写少量差异类（同包同名覆盖或变体实现）和单元测试，并依赖 `trino-connector-common`。
+版本段多少可根据 Trino 社区实际断点和兼容需求增减。
 
-## JDK 与 classfile 版本
-Trino 各版本段对应的 JDK 与 classfile 版本如下：
-- 435–439：JDK 17（classfile 61）
-- 440：JDK 21（classfile 65）
-- 455：JDK 22（classfile 66）
-- 478：JDK 24（classfile 68）
+每个版本段模块：
+- 只实现（同包同名方式或者显式适配器）本段特有的差异：如 SPI 签名变动点、新删方法、类加载/反射相关 hack；
+- 测试上补充本段特有的 UT，有共性逻辑优先沉入 common 层测试。
 
-当前Grravitino支持的工程的JDK版本仅支持JDK17，Trino connector的多版本支持需要升级到JDK,21, 22, 24, 在Trino connector模块的build.gradle中
-toolchain 中根据用户参数中制定的Trino connector版本， 设置对应的JDK 版本,和用的工具版本，确保编译产物符合目标 Trino 版本段的运行时要求。
+## JDK 依赖与构建配置
 
-## 主要 API 差异点（需按版本段覆写/适配）
-- `setNodeCount` → `setWorkerCount`（QueryRunner）
-- `getNextPage` → `getNextSourcePage` 返回 `SourcePage`
-- `finishInsert` / `finishMerge` 新签名需要 unwrap `sourceTableHandles`
+Trino 各版本段推荐编译器/运行 JDK 及 classfile 版本矩阵：
+
+| 版本段     | JDK版本 | Classfile |
+|---------|-------|-----------|
+| 435–439 | 17    | 61        |
+| 440–446 | 21    | 65        |
+| 447–469 | 22    | 66        |
+| 470–478 | 24    | 68        |
+
+注意：Trino 从版本 447 开始要求使用 JDK 22。
+
+**工程配置要点：**
+- 项目 `build.gradle.kts`（或各子模块 build 文件）须精确为 target 段锁定 JDK toolchain，避免交叉；
+- 工具兼容（如 ErrorProne、JaCoCo）如遇 classfile 支持断档，需单独禁用或适配。
+- 版本切换建议用 gradle 参数化（如 `-PtrinoVersion=440`），CI 脚本支持矩阵构建。
+
+## 需重点适配/隔离的 API 差异点举例
+
+各段变化集中但不唯一，常见差异点归纳：
+- `setNodeCount` → `setWorkerCount`（QueryRunner，JDK21以后）
+- `getNextPage` → `getNextSourcePage` / `SourcePage` 类型变化
+- `finishInsert` / `finishMerge` 新签名，需要 unwrap `sourceTableHandles`
 - `getSplitBucketFunction` 新增 `bucketCount` 参数
 - `addColumn` 新增 `ColumnPosition` 参数
-- `ConnectorSplit.getInfo` 移除
-- `Connector.shutdown` 新增生命周期方法
+- `ConnectorSplit.getInfo` SPI 移除
+- `Connector.shutdown` 生命周期接口变化
 
-## 打包/发布
-每个版本段输出独立插件目录，示例：
-```text
-distribution/gravitino-trino-connector-trino435-439
-distribution/gravitino-trino-connector-trino440-455
-distribution/gravitino-trino-connector-trino456-469
-distribution/gravitino-trino-connector-trino470-478
-```
-在relase发布时，可以采用2个方案
+
+**适配原则：**
+- 差异点务必集中于控制层（如 适配器/覆写类/桥接类），坚决避免四处散落导致维护灾难。
+- 若兼容层需用反射 hack，须最小范围（类隔离），主流分支杜绝出现。
+- 每个版本段的代码都必须能编译，测试通过，避免改动破坏兼容性
+
+## 构建/打包/发布流程
+
+Relase发布时，可以采用2个方案
 1. 发布最新版本段的artifact
 2. 发布所有版本段的artifact
-发布最新版本段的artifact可以简化用户选择，维护和测试比较简单，但用户如果需要使用老版本段的Trino就无法直接下载到对应的Gravitino trino-connector版本。
-需要用户自己编译老版本段的trino-connector。
+
+发布最新版本段的artifact可以简化用户选择，维护和测试比较简单，但用户如果需要使用老版本段的Trino就无法直接下载到对应的
+Gravitino trino-connector版本。 需要用户自己编译老版本段的trino-connector。
 发布所有版本段的artifact可以满足更多用户需求，但增加了维护和测试成本。
 
-## 测试
-- **单元测试**：各版本段模块包含独立的单元测试，覆盖差异类与适配逻辑。公共逻辑在 `trino-connector-common` 中测试。
-- **集成测试**：
-集成测试不依赖trino版本，增加集成测试的docker compose中增加trino version的配置项，通过脚本测试不同版本段的兼容性。
+
+### 构建与打包
+- 通过 gradle 任务（如 `./gradlew :assembleDistribution -Ptrino-versios=435-439`）单独构建某个版本段插件包；
+产生的 jar 位于对应子模块的 `build/libs/` 目录下。
+
+```text
+distribution/gravitino-trino-connector-trino435-439/
+```
+
+最终只需将对应目录整体拷贝到 Trino 的 `${TRINO_HOME}/plugin/gravitino/`，重启即可生效。
+
+### 发布策略建议
+- 推荐每个 release 支持所有主流在维护“段”包（除非与 Trino 主社区明确随时放弃某些段）
+- 如维护成本受限，可优先主推最新（如 479 段），老段梳理长期 LTS 持续支持；超长期可只留源码供用户自行构建
+- CI 必须至少矩阵验证当前所有主要段的 UT、端到端集成等
+
+### 用户选择指引
+
+用户根据trino版本选择对应的插件包：
+| Trino 版本 | 推荐插件目录（解压重命名为plugin/gravitino）|
+| ---------- | ----------------------------------------- |
+| gravitino-trino-connector-trino435-439 |
+| gravitino-trino-connector-trino440-455 |
+| gravitino-trino-connector-trino470-478 |
+
+如trino-478版本以上，建议选择最新段插件包。
+如遇新/冷门版本未正式支持，可用选择相近的版本，并配置参数 `gravitino.trino.skip-version-validation=true`临时跳过版本校验，以供测试验证。
+
+## 测试与 CI
+
+### 单元测试
+- 各段必须有差异适配 UT（如各 SPI 断点/api断点 UT、版本适配异常 UT），通用逻辑在 `trino-connector-common` 测试。
+- 可采用 gradle 子项目参数化运行所有段用例（见 `-PskipITs` 等实践）；
+- 每次 PR/Release 必须矩阵测试所有受支持段。
+
+### 集成/端到端测试
+- 推荐改造现有docker compose测试环境, 实现多版本 Trino 集成自动测试
+- 集成测试重点验证数据写入/查询/元数据联动，不同版本的 connector 能否完整生命周期跑通。
