@@ -42,13 +42,14 @@ while getopts ":b:s:p:t:r:nyh" opt; do
       echo "  -s <step>     Release step to execute: tag, build, docs, publish, finalize"
       echo "  -r <num>      Release candidate number (e.g., 6 for rc6)"
       echo "  -n            Dry run mode"
-      echo "  -p <pass>     GPG passphrase"
-      echo "  -t <pass>     ASF password"
+      echo "  -p <pass>     GPG passphrase (insecure; prefer GPG_PASSPHRASE env var)"
+      echo "  -t <pass>     ASF password (insecure; prefer ASF_PASSWORD env var)"
       echo "  -y            Force continue without confirmation"
       echo "  -h            Show this help message"
       exit 0
       ;;
-    \?) error "Invalid option: $OPTARG" ;;
+    :) echo "Option -$OPTARG requires an argument." >&2; exit 1 ;;
+    \?) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
   esac
 done
 
@@ -56,6 +57,9 @@ export DRY_RUN=${DRY_RUN:-0}
 export FORCE=${FORCE:-0}
 export RC_COUNT=${RC_COUNT:-0}
 export RELEASE_STEP=${RELEASE_STEP:-}
+export GIT_BRANCH=${GIT_BRANCH:-}
+export ASF_PASSWORD=${ASF_PASSWORD:-}
+export GPG_PASSPHRASE=${GPG_PASSPHRASE:-}
 
 echo "DRY_RUN=$DRY_RUN FORCE=$FORCE RC_COUNT=$RC_COUNT RELEASE_STEP=$RELEASE_STEP"
 
@@ -75,7 +79,7 @@ fi
 . "$SELF/release-util.sh"
 
 if ! is_dry_run; then
-  if [[ -z "$PYPI_API_TOKEN" ]]; then
+  if [[ -z "${PYPI_API_TOKEN:-}" ]]; then
     echo 'The environment variable PYPI_API_TOKEN is not set. Exiting.'
     exit 1
   fi
@@ -83,10 +87,10 @@ fi
 
 if [ "$RUNNING_IN_DOCKER" = "1" ]; then
   # Inside docker, need to import the GPG key stored in the current directory.
-  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --import "$SELF/gpg.key"
+  echo "${GPG_PASSPHRASE:-}" | $GPG --passphrase-fd 0 --import "$SELF/gpg.key"
 
   # We may need to adjust the path since JAVA_HOME may be overridden by the driver script.
-  if [ -n "$JAVA_HOME" ]; then
+  if [ -n "${JAVA_HOME:-}" ]; then
     export PATH="$JAVA_HOME/bin:$PATH"
   else
     # JAVA_HOME for the openjdk package.
@@ -99,7 +103,7 @@ else
   GIT_BRANCH=${GIT_BRANCH:-}
   RC_COUNT=${RC_COUNT:-0}
 
-  if [ -z "$GIT_BRANCH" ] || [ -z "$RELEASE_VERSION" ] || [ -z "$RC_COUNT" ]; then
+  if [ -z "$GIT_BRANCH" ] || [ -z "$RELEASE_VERSION" ] || [ "${RC_COUNT:-0}" -eq 0 ]; then
     get_release_info
   fi
 fi

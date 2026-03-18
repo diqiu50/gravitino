@@ -72,10 +72,8 @@ function run_silent {
   echo "Command: $@"
   echo "Log file: $LOG_FILE"
 
-  "$@" 1>"$LOG_FILE" 2>&1
-
-  local EC=$?
-  if [ $EC != 0 ]; then
+  if ! "$@" 1>"$LOG_FILE" 2>&1; then
+    local EC=$?
     echo "Command FAILED. Check full logs for details."
     tail "$LOG_FILE"
     exit $EC
@@ -146,10 +144,11 @@ function get_release_info {
   export NEXT_VERSION
   export RELEASE_VERSION=$(read_config "Release" "$RELEASE_VERSION" RELEASE_VERSION)
 
-  if [ "$FORCE" = "1" ]; then
+  # If -r was explicitly provided (non-zero), override the auto-detected NRC_COUNT
+  if [ "${RC_COUNT:-0}" -gt 0 ]; then
     NRC_COUNT=$RC_COUNT
   fi
-  RC_COUNT=$(read_config "RC #" "$RC_COUNT" NRC_COUNT)
+  RC_COUNT=$(read_config "RC #" "$NRC_COUNT" NRC_COUNT)
   export RC_COUNT
 
   # Check if the RC already exists, and if re-creating the RC, skip tag creation.
@@ -182,11 +181,11 @@ function get_release_info {
   export GRAVITINO_PACKAGE_VERSION="$RELEASE_TAG"
 
   # Gather some user information.
-  if [ -z "$ASF_USERNAME" ]; then
+  if [ -z "${ASF_USERNAME:-}" ]; then
     export ASF_USERNAME=$(read_config "ASF user" "$LOGNAME" ASF_USERNAME)
   fi
 
-  if [ -z "$GIT_NAME" ]; then
+  if [ -z "${GIT_NAME:-}" ]; then
     GIT_NAME=$(git config user.name || echo "")
     export GIT_NAME=$(read_config "Full name" "$GIT_NAME" GIT_NAME)
   fi
@@ -220,14 +219,14 @@ EOF
   fi
 
   if ! is_dry_run; then
-    if [ -z "$ASF_PASSWORD" ]; then
+    if [ -z "${ASF_PASSWORD:-}" ]; then
       stty -echo && printf "ASF password: " && read ASF_PASSWORD && printf '\n' && stty echo
     fi
   else
     ASF_PASSWORD="***INVALID***"
   fi
 
-  if [ -z "$GPG_PASSPHRASE" ]; then
+  if [ -z "${GPG_PASSPHRASE:-}" ]; then
     stty -echo && printf "GPG passphrase: " && read GPG_PASSPHRASE && printf '\n' && stty echo
   fi
 
