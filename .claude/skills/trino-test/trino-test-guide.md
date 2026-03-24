@@ -19,553 +19,307 @@
 
 # Trino Integration Test Guide
 
-## Overview
+> SQL-file-driven integration tests: run `.sql` files against real Trino + Gravitino containers and compare output against `.txt` files.
 
-Gravitino's Trino integration tests are executed through the **TrinoQueryTestTool** class, which reads SQL files from testsets, executes SQL statements, and verifies output results. The tests support multiple modes and flexible configuration options.
+## Quick Reference
 
-## Part 1: How to Run Tests
+```bash
+# Run all tests
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh --auto=all
 
-### Test Architecture
+# Run one testset
+... --auto=all --test_set=jdbc-mysql
+
+# Run one test file
+... --auto=all --test_set=jdbc-mysql --tester_id=00004
+
+# Start environment for manual testing (returns to shell when ready)
+... --auto=all --env_only
+
+# Stop background environment
+... --stop
+```
+
+---
+
+## Part 1: Workflows
+
+### 1.1 Run Tests
+
+```bash
+SCRIPT=./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh
+
+# All tests
+$SCRIPT --auto=all
+
+# Specific testset
+$SCRIPT --auto=all --test_set=jdbc-mysql
+
+# Specific catalog within testset
+$SCRIPT --auto=all --test_set=tpch --catalog=mysql
+
+# Specific test file
+$SCRIPT --auto=all --test_set=jdbc-mysql --tester_id=00004
+
+# Ignore failures and continue
+$SCRIPT --auto=all --ignore_failed
+
+# Specific Trino version
+$SCRIPT --auto=all --trino_version=452 \
+  --trino_connector_dir=/path/to/trino-connector-452/build/libs
+
+# Connect to existing services (no auto-start)
+$SCRIPT --auto=none \
+  --gravitino_uri=http://10.3.21.12:8090 \
+  --trino_uri=http://10.3.21.12:8080 \
+  --mysql_uri=jdbc:mysql://10.3.21.12:3306 \
+  --test_set=jdbc-mysql
+```
+
+### 1.2 Manual Testing (env_only)
+
+Start the full environment without running any tests. **Always use `--auto=all`.**
+
+```bash
+# 1. Start (returns to shell once ready)
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
+  --auto=all --env_only
+
+# 2. Connect to Trino CLI
+.claude/skills/trino-test/trino
+
+# 3. Stop when done
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh --stop
+```
+
+Expected output after startup:
+```
+Starting environment, please wait...
+=======================================================
+Environment is ready for manual testing.
+  Gravitino URI : http://127.0.0.1:8090
+  Trino URI     : http://127.0.0.1:8080
+Connect to Trino CLI:
+  .claude/skills/trino-test/trino
+=======================================================
+Environment is running in background (PID: 12345)
+Logs  : .../integration-test-common/build/trino-test-env.log
+Stop  : ... --stop
+$
+```
+
+### 1.3 Add a Test to an Existing Testset
+
+```bash
+# 1. Create SQL file
+vi src/test/resources/trino-ci-testset/testsets/jdbc-mysql/00010_new_test.sql
+
+# 2. Generate expected output
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
+  --auto=all --test_set=jdbc-mysql --tester_id=00010 --gen_output
+
+# 3. Copy generated .txt to src (gen_output writes to build/, not src/)
+cp trino-connector/integration-test/build/resources/test/trino-ci-testset/testsets/jdbc-mysql/00010_new_test.txt \
+   trino-connector/integration-test/src/test/resources/trino-ci-testset/testsets/jdbc-mysql/00010_new_test.txt
+
+# 4. Review and adjust with % wildcards, then verify
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
+  --auto=all --test_set=jdbc-mysql --tester_id=00010
+```
+
+### 1.4 Add a New Catalog Testset
+
+```bash
+TESTSETS=trino-connector/integration-test/src/test/resources/trino-ci-testset/testsets
+
+# 1. Create directory
+mkdir -p $TESTSETS/<catalog-type>/
+
+# 2. Create catalog_<name>_prepare.sql
+cat > $TESTSETS/<catalog-type>/catalog_<name>_prepare.sql << 'EOF'
+call gravitino.system.create_catalog(
+    'gt_<name>',
+    '<provider>',
+    map(array['key1'], array['${param1}'])
+);
+EOF
+
+# 3. Create catalog_<name>_cleanup.sql
+cat > $TESTSETS/<catalog-type>/catalog_<name>_cleanup.sql << 'EOF'
+DROP SCHEMA IF EXISTS gt_<name>.gt_db1;
+call gravitino.system.drop_catalog('gt_<name>');
+EOF
+
+# 4. Write numbered test files (00000_*.sql + 00000_*.txt pairs)
+#    Use --env_only to capture real output for .txt files:
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
+  --auto=all --env_only --params=param1,value1
+
+docker exec trino-ci-trino trino --output-format CSV_UNQUOTED <<'EOF'
+CREATE SCHEMA gt_<name>.gt_db1;
+EOF
+# → write the output to 00000_create_schema.txt
+
+# 5. Run to verify
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
+  --auto=all --test_set=<catalog-type> --params=param1,value1
+```
+
+### 1.5 Debug a Failing Test
+
+```bash
+# 1. Run the failing test alone
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
+  --auto=all --test_set=jdbc-mysql --tester_id=00004
+
+# 2. Read failure output — shows Sql / Expect / Actual
+cat integration-test-common/build/integration-test-common-integration-test.log
+
+# 3. Fix: update .txt with % wildcard for variable parts, then re-run
+```
+
+Log locations:
+```bash
+# Test execution log
+integration-test-common/build/integration-test-common-integration-test.log
+
+# Container logs
+integration-test-common/build/trino-ci-container-log/trino.log
+integration-test-common/build/trino-ci-container-log/hive/
+integration-test-common/build/trino-ci-container-log/hdfs/
+
+# env_only background process log
+integration-test-common/build/trino-test-env.log
+```
+
+---
+
+## Part 2: Reference
+
+### 2.1 Tool Architecture
 
 ```
 trino-connector/integration-test/
 ├── src/test/
-│   ├── java/
-│   │   └── .../TrinoQueryTestTool.java          # Core test tool class
-│   └── resources/
-│       └── trino-ci-testset/testsets/           # Test sets directory
-│           ├── jdbc-mysql/                       # MySQL test set
-│           │   ├── 00001_select_table.sql       # SQL test file
-│           │   └── 00001_select_table.txt       # Expected output file
-│           ├── jdbc-postgresql/                  # PostgreSQL test set
-│           ├── lakehouse-iceberg/                # Iceberg test set
-│           ├── hive/                             # Hive test set
-│           ├── tpch/                             # TPC-H test set
-│           └── tpcds/                            # TPC-DS test set
-└── trino-test-tools/                            # Test scripts
-    ├── trino_integration_test.sh                # Main test script
-    └── run_test_with_versions.sh                # Multi-version test script
+│   ├── java/.../integration/test/
+│   │   ├── TrinoQueryITBase.java    # Container/server startup & teardown
+│   │   ├── TrinoQueryIT.java        # SQL execution & result matching
+│   │   ├── TrinoQueryRunner.java    # Trino JDBC client wrapper
+│   │   └── TrinoQueryTestTool.java  # CLI entry point
+│   └── resources/trino-ci-testset/
+│       ├── testsets/                # Standard testsets
+│       │   ├── jdbc-mysql/
+│       │   ├── jdbc-postgresql/
+│       │   ├── jdbc-bigquery/
+│       │   ├── lakehouse-iceberg/
+│       │   ├── hive/
+│       │   ├── tpch/
+│       │   └── tpcds/
+│       └── trino-cascading-testsets/  # Federated query testsets
+└── trino-test-tools/
+    ├── trino_integration_test.sh    # Main launcher (recommended)
+    └── run_test_with_versions.sh    # Multi-version launcher
 ```
 
-### 1.1 Running Tests with Scripts (Recommended)
+### 2.2 Script Parameters
 
-#### Basic Usage
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--auto` | Service startup mode: `all` / `gravitino` / `none` | `all` |
+| `--env_only` | Start env in background for manual testing, use `--stop` to shutdown | - |
+| `--stop` | Stop a background `--env_only` environment | - |
+| `--test_set` | Testset directory name | - |
+| `--catalog` | Catalog name within testset | - |
+| `--tester_id` | Test file number prefix (e.g. `00004`) | - |
+| `--gen_output` | Generate `.txt` expected output files | false |
+| `--ignore_failed` | Continue on test failure | false |
+| `--params` | Variable substitution: `key1,v1;key2,v2` | - |
+| `--trino_version` | Trino version to use | 435 |
+| `--trino_worker_num` | Number of independent Trino workers | 0 |
+| `--trino_connector_dir` | Path to Gravitino connector JARs | `trino-connector/build/libs` |
+| `--test_host` | Host for all services (overrides individual URIs) | 127.0.0.1 |
+| `--gravitino_uri` | Gravitino server URL (used when `--auto=none`) | - |
+| `--trino_uri` | Trino URL (used when `--auto=none`) | - |
+| `--mysql_uri` / `--postgresql_uri` / `--hive_uri` / `--hdfs_uri` | Service URIs | - |
+| `--test_sets_dir` | Custom testsets directory | classpath default |
+| `--help` | Print help | - |
 
-```bash
-# Run all tests (auto-start all services)
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh --auto=all
+Built-in substitution variables (auto-populated from service URIs):
+`${mysql_uri}`, `${hive_uri}`, `${hdfs_uri}`, `${postgresql_uri}`, `${trino_uri}`, `${gravitino_uri}`
 
-# Run all tests and ignore failures
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all --ignore_failed
+### 2.3 Testset File Structure
+
+```
+testsets/<catalog-type>/
+├── catalog_<name>_prepare.sql   # Creates catalog (runs before all testers)
+├── catalog_<name>_cleanup.sql   # Drops catalog (runs after all testers)
+├── 00000_create_table.sql       # Tester SQL
+├── 00000_create_table.txt       # Expected output (paired with .sql)
+├── 00001_select_table.sql
+├── 00001_select_table.txt
+└── ignored/                     # Files here are skipped
 ```
 
-#### Specify Test Set
+Execution order per catalog:
+1. `catalog_<name>_prepare.sql`
+2. `00000_*.sql` → compare with `00000_*.txt`
+3. `00001_*.sql` → compare with `00001_*.txt` … (sorted numerically)
+4. `catalog_<name>_cleanup.sql`
 
-```bash
-# Run specific test set (e.g., jdbc-mysql)
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all --test_set=jdbc-mysql
+### 2.4 Expected Output Format
 
-# Run specific test set under specific catalog
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all --test_set=tpch --catalog=mysql
-```
-
-#### Specify Test File
-
-```bash
-# Run specific test file (by tester_id prefix)
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all --test_set=jdbc-mysql --tester_id=00004
-
-# This will run jdbc-mysql/00004_query_pushdown.sql
-```
-
-#### Specify Trino Version
-
-```bash
-# Test with a specific Trino version
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all --trino_version=<VERSION> \
-  --trino_connector_dir=/path/to/trino-connector-<VERSION_RANGE>/build/libs
-```
-
-### 1.2 Test Modes
-
-#### Auto Mode (--auto)
-
-**all (default)**: Auto-start all services
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh --auto=all
-```
-- Auto-start Gravitino server
-- Auto-start Docker containers (Trino, Hive, MySQL, PostgreSQL, etc.)
-- Suitable for local development and CI environments
-
-**gravitino**: Start only Gravitino server
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh --auto=gravitino
-```
-- Auto-start Gravitino server
-- Requires manual start of other services
-- Suitable for debugging Gravitino server
-
-**none**: Don't auto-start any services
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=none \
-  --gravitino_uri=http://10.3.21.12:8090 \
-  --trino_uri=http://10.3.21.12:8080 \
-  --mysql_uri=jdbc:mysql://10.3.21.12:3306
-```
-- Connect to running services
-- Suitable for connecting to remote test environments
-
-### 1.3 Advanced Options
-
-#### Distributed Cluster Testing
-
-```bash
-# Use 3 independent Trino worker nodes
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all --trino_worker_num=3
-```
-
-#### Generate Expected Output Files
-
-```bash
-# Generate expected output files for tests (for creating new tests)
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all --test_set=jdbc-mysql --gen_output
-```
-
-#### Parameter Substitution
-
-```bash
-# Replace ${key} variables in test files
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all --params=key1,value1;key2,value2
-```
-
-### 1.4 TrinoQueryTestTool Complete Parameter List
-
-| Parameter | Description | Default | Example |
-|-----------|-------------|---------|---------|
-| `--auto` | Auto-start mode: all/gravitino/none | all | `--auto=all` |
-| `--ignore_failed` | Ignore failed tests and continue | false | `--ignore_failed` |
-| `--gen_output` | Generate expected output files | false | `--gen_output` |
-| `--test_host` | Host address for all services | 127.0.0.1 | `--test_host=10.3.21.12` |
-| `--gravitino_uri` | Gravitino server URL | - | `--gravitino_uri=http://localhost:8090` |
-| `--trino_uri` | Trino URL | - | `--trino_uri=http://localhost:8080` |
-| `--hive_uri` | Hive metastore URL | - | `--hive_uri=thrift://localhost:9083` |
-| `--mysql_uri` | MySQL JDBC URL | - | `--mysql_uri=jdbc:mysql://localhost:3306` |
-| `--postgresql_uri` | PostgreSQL JDBC URL | - | `--postgresql_uri=jdbc:postgresql://localhost:5432` |
-| `--hdfs_uri` | HDFS URL | - | `--hdfs_uri=hdfs://localhost:9000` |
-| `--test_sets_dir` | Test sets directory | src/test/resources/trino-ci-testset/testsets | `--test_sets_dir=/path/to/testsets` |
-| `--test_set` | Specify test set name | - | `--test_set=jdbc-mysql` |
-| `--tester_id` | Specify test file prefix | - | `--tester_id=00004` |
-| `--catalog` | Specify catalog name | - | `--catalog=mysql` |
-| `--params` | Parameter substitution | - | `--params=key1,v1;key2,v2` |
-| `--trino_worker_num` | Number of Trino workers | 0 | `--trino_worker_num=3` |
-| `--trino_version` | Trino version | - | `--trino_version=<VERSION>` |
-| `--trino_connector_dir` | Connector JAR directory | trino-connector/build/libs | `--trino_connector_dir=/path/to/libs` |
-| `--help` | Show help message | - | `--help` |
-
-### 1.5 Common Test Scenarios
-
-#### Scenario 1: Quick validation of all tests
-
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh --auto=all
-```
-
-#### Scenario 2: Test only MySQL functionality
-
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all --test_set=jdbc-mysql
-```
-
-#### Scenario 3: Debug specific test file
-
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all --test_set=jdbc-mysql --tester_id=00004
-```
-
-#### Scenario 4: Connect to remote test environment
-
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=none \
-  --gravitino_uri=http://remote-server:8090 \
-  --trino_uri=http://remote-server:8080 \
-  --mysql_uri=jdbc:mysql://remote-server:3306 \
-  --test_set=jdbc-mysql
-```
-
-## Part 2: How to Add/Modify Tests
-
-### 2.1 Test File Structure
-
-Each test consists of two files:
-
-1. **SQL file** (`.sql`): Contains SQL statements to execute
-2. **Expected output file** (`.txt`): Contains expected output for each SQL statement
-
-### 2.2 Adding New Tests
-
-#### Step 1: Create SQL Test File
-
-Create SQL file in the appropriate test set directory with format: `{number}_{test_name}.sql`
-
-```bash
-# Example: Create new query test
-vi trino-connector/integration-test/src/test/resources/trino-ci-testset/testsets/jdbc-mysql/00010_new_query.sql
-```
-
-SQL file content example:
-```sql
--- Create schema
-CREATE SCHEMA gt_mysql.test_db;
-
--- Use schema
-USE gt_mysql.test_db;
-
--- Create table
-CREATE TABLE users (
-   id bigint NOT NULL,
-   name varchar(50) NOT NULL,
-   email varchar(100) NOT NULL
-);
-
--- Insert data
-INSERT INTO users VALUES (1, 'Alice', 'alice@example.com');
-INSERT INTO users VALUES (2, 'Bob', 'bob@example.com');
-
--- Query data
-SELECT * FROM users ORDER BY id;
-
--- Cleanup
-DROP TABLE users;
-DROP SCHEMA test_db;
-```
-
-#### Step 2: Generate Expected Output File
-
-Use `--gen_output` option to auto-generate expected output:
-
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all \
-  --test_set=jdbc-mysql \
-  --tester_id=00010 \
-  --gen_output
-```
-
-This will generate `00010_new_query.txt` file containing actual execution output.
-
-#### Step 3: Verify and Adjust Expected Output
-
-Check the generated `.txt` file:
-```bash
-cat trino-connector/integration-test/src/test/resources/trino-ci-testset/testsets/jdbc-mysql/00010_new_query.txt
-```
-
-Adjust expected output as needed, using wildcard `%` to match variable content.
-
-### 2.3 Modifying Existing Tests
-
-#### Modify SQL File
-
-Directly edit the `.sql` file:
-```bash
-vi trino-connector/integration-test/src/test/resources/trino-ci-testset/testsets/jdbc-mysql/00004_query_pushdown.sql
-```
-
-#### Update Expected Output
-
-Method 1: Regenerate
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all \
-  --test_set=jdbc-mysql \
-  --tester_id=00004 \
-  --gen_output
-```
-
-Method 2: Manual edit
-```bash
-vi trino-connector/integration-test/src/test/resources/trino-ci-testset/testsets/jdbc-mysql/00004_query_pushdown.txt
-```
-
-### 2.4 Expected Output File Format
-
-#### Basic Format
-
-Expected output file contains expected output for each SQL statement, separated by blank lines:
+Each SQL statement's result is separated by a **blank line**:
 
 ```
 CREATE SCHEMA
 
-USE
-
 CREATE TABLE
 
-INSERT: 2 rows
-
-"1","Alice","alice@example.com"
-"2","Bob","bob@example.com"
+"1","Alice"
+"2","Bob"
 
 DROP TABLE
-
-DROP SCHEMA
 ```
 
-#### Using Wildcards
+**Matching patterns:**
 
-Use `%` to match variable content:
+| Pattern | Usage | Example |
+|---------|-------|---------|
+| Exact | Literal match | `CREATE TABLE` |
+| `%` wildcard | Matches any characters | `location = 'hdfs://%:9000/...'` |
+| Quoted multi-line | Wrap in `"..."` for multi-line output | `"Trino version: %`<br>`%TableScan[%]`<br>`"` |
+| `<QUERY_FAILED> msg` | Assert query fails with message | `<QUERY_FAILED> Table "t" must be qualified` |
+| `<BLANK_LINE>` | Assert query returns no rows | `<BLANK_LINE>` |
 
-**Example 1: Match version number**
-```
-"Trino version: %
-```
-Matches any Trino version string, e.g. `Trino version: 452`, `Trino version: 435`, etc.
+Add `-- <RETRY_WITH_NOT_EXISTS>` as first line of a `.sql` file to retry on eventual-consistency errors.
 
-**Example 2: Match query plan**
-```
-%TableScan[table = gt_mysql:gt_db1.customer%]
-```
-Matches any TableScan node containing this table
+### 2.5 catalog_prepare.sql Pattern
 
-**Example 3: Match LIKE operation**
-```
-%ScanFilter[table = gt_mysql:gt_db1.customer%like%phone%]
-```
-Ensures output contains `like` and `phone`, verifying query pushdown functionality
-
-#### Quote Rules
-
-For multi-line output (like EXPLAIN results), wrap with double quotes:
-
-```
-"Trino version: %
-%
-    %TableScan[table = gt_mysql:gt_db1.customer%]
-           Layout: [custkey:bigint, name:varchar(25)]
-%
-"
-```
-
-### 2.5 Testing Best Practices
-
-#### 1. Test Independence
-
-Each test should be independent, not depending on other tests:
 ```sql
--- Good practice: Create and cleanup own resources
-CREATE SCHEMA test_db;
-USE test_db;
-CREATE TABLE test_table (...);
--- Execute test
-DROP TABLE test_table;
-DROP SCHEMA test_db;
+call gravitino.system.create_catalog(
+    'gt_<name>',
+    '<catalog-provider>',
+    map(
+        array['key1', 'key2'],
+        array['${param1}', '${param2}']
+    )
+);
 ```
 
-#### 2. Use Meaningful Test Names
+Use `${param_name}` for values passed via `--params`. Catalog name convention: `gt_<type>`.
 
-```
-00001_select_table.sql          # Basic query test
-00004_query_pushdown.sql        # Query pushdown test
-00008_update_table.sql          # UPDATE operation test
-```
+### 2.6 Best Practices
 
-#### 3. Expected Output Flexibility
+- **Test independence**: each `.sql` file creates and drops its own schemas/tables.
+- **Flexible matching**: use `%` for version strings, IPs, timestamps — but keep enough specifics to verify behavior.
+- **Minimal data**: 2-3 rows is enough; avoid large inserts.
+- **5-digit numbering**: `00000_`, `00001_` … for deterministic ordering.
 
-Use wildcards to match variable content, but retain key information for verification:
+### 2.7 Common Issues
 
-```
-# Too strict (will fail due to version changes)
-└─ ScanFilter[table = gt_mysql:gt_db1.customer, filterPredicate = "$like"("phone", ...)]
-
-# Too loose (cannot verify functionality)
-%
-
-# Appropriate (verifies key functionality, allows format changes)
-%ScanFilter[table = gt_mysql:gt_db1.customer%like%phone%]
-```
-
-#### 4. Test Data Volume
-
-Use appropriate amount of test data:
-```sql
--- Good practice: Small but sufficient data
-INSERT INTO customer VALUES (1, 'Alice', ...);
-INSERT INTO customer VALUES (2, 'Bob', ...);
-
--- Avoid: Too much test data
-INSERT INTO customer SELECT * FROM large_table; -- May cause slow tests
-```
-
-### 2.6 Debugging Tests
-
-#### View Test Execution Logs
-
-Test logs output to console with detailed execution information:
-```
-2026-02-06 21:17:25 INFO  [pool-7-thread-1] TrinoQueryIT:245 -
-Execute sql in the tester jdbc-mysql/00004_query_pushdown.sql under catalog mysql successfully.
-```
-
-#### Compare Actual vs Expected Output
-
-When test fails, logs show:
-```
-Failed to execute test java.lang.RuntimeException:
-Execute sql in the tester jdbc-mysql/00004_query_pushdown.sql under catalog mysql failed.
-Sql:
-explain select * from customer where phone like '%2342%' limit 10;
-Expect:
-"Trino version: %
-%
-    %ScanFilter[...]
-"
-Actual:
-"Trino version: 435
-Fragment 0 [SINGLE]
-    ...
-"
-```
-
-#### Run Failed Test Separately
-
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all \
-  --test_set=jdbc-mysql \
-  --tester_id=00004
-```
-
-#### Use ignore_failed to Continue Testing
-
-```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all \
-  --ignore_failed
-```
-
-#### Check Log Files
-
-When tests fail or you need to debug issues, check the following log locations:
-
-**Test Execution Logs:**
-```bash
-# Integration test logs (test execution output)
-cat integration-test-common/build/integration-test-common-integration-test.log
-```
-
-**Container Logs:**
-```bash
-# Trino container logs
-cat integration-test-common/build/trino-ci-container-log/trino.log
-
-# Hive container logs (directory containing multiple log files)
-ls integration-test-common/build/trino-ci-container-log/hive/
-cat integration-test-common/build/trino-ci-container-log/hive/<log-file>
-
-# HDFS container logs (directory containing multiple log files)
-ls integration-test-common/build/trino-ci-container-log/hdfs/
-cat integration-test-common/build/trino-ci-container-log/hdfs/<log-file>
-```
-
-These logs contain detailed information about:
-- Test execution results and failures
-- SQL query execution details
-- Container startup and runtime issues
-- Service connection errors
-- Docker container output
-
-### 2.7 Test Set Organization
-
-#### Organize by Functionality
-
-```
-testsets/
-├── jdbc-mysql/              # MySQL JDBC functionality tests
-├── jdbc-postgresql/         # PostgreSQL JDBC functionality tests
-├── lakehouse-iceberg/       # Iceberg lakehouse functionality tests
-├── hive/                    # Hive functionality tests
-├── tpch/                    # TPC-H benchmark tests
-└── tpcds/                   # TPC-DS benchmark tests
-```
-
-All test sets are located in the testsets directory. Each test set contains one or more catalogs to test.
-Each catalog in a test set requires two files for initialization and cleanup:
-- `catalog_xxx_prepare.txt`: Initialization script
-- `catalog_xxx_clean.txt`: Cleanup script
-
-Each test file will be executed against every catalog in the test set.
-
-#### Test File Naming Convention
-
-Use 5-digit number prefix for easy sorting and reference:
-```
-00001_basic_query.sql
-00002_join_query.sql
-00003_aggregate_query.sql
-00004_query_pushdown.sql
-...
-00010_new_feature.sql
-```
-
-### 2.8 Common Issues
-
-#### Issue 1: Test output mismatch
-
-**Cause**: Trino version changes causing output format changes
-
-**Solution**: Use wildcard patterns to make expected output more flexible
-```
-# Before
-└─ TableScan[table = gt_mysql:gt_db1.customer, limit=10]
-
-# After
-%TableScan[table = gt_mysql:gt_db1.customer%limit%10%]
-```
-
-#### Issue 2: Test timeout
-
-**Cause**: Too much test data or complex queries
-
-**Solution**:
-- Reduce test data volume
-- Simplify queries
-- Increase timeout settings
-
-#### Issue 3: Docker container startup failure
-
-**Cause**: Port conflicts or insufficient resources
-
-**Solution**:
-```bash
-# Cleanup old containers
-./integration-test-common/docker-script/shutdown.sh
-
-# Check port usage
-lsof -i :8080
-lsof -i :9083
-```
-
-## Summary
-
-### Running Tests
-- Use `trino_integration_test.sh` script to run tests
-- Core tool class is `TrinoQueryTestTool`
-- Supports multiple test modes and flexible configuration
-
-### Adding/Modifying Tests
-1. Create `.sql` file to define test SQL
-2. Use `--gen_output` to generate expected output
-3. Use wildcard `%` to make expected output flexible
-4. Keep tests independent and data volume appropriate
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Output mismatch | Trino version format change | Use `%` wildcards in `.txt` |
+| `--gen_output` files lost | Written to `build/`, not `src/` | Copy to `src/test/resources/` |
+| Container startup failure | Port conflict or stale state | Run `integration-test-common/docker-script/shutdown.sh`, check `lsof -i :8080` |
+| `--auto=all` fails immediately | Distribution not built | Run `./gradlew compileDistribution` first |

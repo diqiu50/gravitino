@@ -20,7 +20,7 @@
 ---
 name: trino-test
 description: Run, debug, and manage Trino integration tests for the Gravitino project.
-argument-hint: "[command or intent] (e.g. run all | test mysql | trino 446 | add test)"
+argument-hint: "[intent] (e.g. run all | run jdbc-mysql | run 00004 | version 446 | env_only | stop | add test | add testset bigquery | debug | gen_output)"
 allowed-tools: Bash
 disable-model-invocation: false
 ---
@@ -30,36 +30,28 @@ disable-model-invocation: false
 This skill helps you **run, debug, and manage Trino integration tests** for the **Gravitino** project.
 
 Use this skill whenever the user asks about:
-- running Trino integration tests
-- testing specific connectors (e.g. MySQL)
-- testing specific Trino versions
-- adding or fixing Trino test cases
+- running Trino integration tests (all, specific testset, catalog, or file)
+- testing with a specific Trino version
+- starting / stopping a manual test environment (`--env_only` / `--stop`)
+- connecting to Trino CLI for interactive testing
+- adding a test to an existing testset
+- adding a new catalog testset (e.g. BigQuery)
+- generating expected output files (`--gen_output`)
+- debugging a failing test (reading logs, fixing `.txt` files)
 
 ---
 
 ## Documentation Reference
 
-Full guide:
+Full guide: `.claude/skills/trino-test/trino-test-guide.md`
 
-.claude/skills/trino-test-guide.md
-
-Read the guide for complete details on:
-- Test architecture and structure
-- All available parameters and options
-- Test modes (`--auto=all | gravitino | none`)
-- Adding and modifying tests
-- Expected output format (`.txt` with `%` wildcards)
-- Debugging and troubleshooting
+Trino CLI wrapper (connects to `trino-ci-trino` container): `.claude/skills/trino-test/trino`
 
 ---
 
 ## Project Root
 
-All commands assume:
-
-```bash
-cd /home/ubuntu/git/gravitino
-```
+All commands run from the **Claude working directory** (project root).
 
 ---
 
@@ -67,8 +59,7 @@ cd /home/ubuntu/git/gravitino
 
 ### Run all tests
 ```bash
-./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh --auto=all
 ```
 
 ### Run specific test set
@@ -83,12 +74,13 @@ cd /home/ubuntu/git/gravitino
   --auto=all --test_set=jdbc-mysql --tester_id=00004
 ```
 
-### Run specific test catalog with testset
+### Run specific catalog within testset
+```bash
 ./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
-  --auto=all  --test_set=tpch --catalog=hive
+  --auto=all --test_set=tpch --catalog=hive
+```
 
-
-### Test specific Trino version with specific trino connector
+### Test specific Trino version
 ```bash
 ./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
   --auto=all \
@@ -96,13 +88,19 @@ cd /home/ubuntu/git/gravitino
   --trino_connector_dir=<WORKSPACE>/trino-connector/trino-connector-<VERSION_RANGE>/build/libs
 ```
 
-## Check test status
+### Start environment for manual testing
+```bash
+# Start (returns to shell when ready)
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh --auto=all --env_only
 
-grep -E "(Test progress|All testers|Total|PASS|FAIL|BUILD) from log
+# Connect Trino CLI
+.claude/skills/trino-test/trino
+
+# Stop
+./trino-connector/integration-test/trino-test-tools/trino_integration_test.sh --stop
+```
 
 ## Test Structure
-
-Location:
 
 ```
 trino-connector/integration-test/src/test/resources/trino-ci-testset/testsets/
@@ -110,5 +108,4 @@ trino-connector/integration-test/src/test/resources/trino-ci-testset/testsets/
 
 Each test consists of:
 - `*.sql` — SQL statements to execute
-- `*.txt` — Expected output
-  - Supports `%` wildcard for flexible matching
+- `*.txt` — Expected output (supports `%` wildcard for flexible matching)
