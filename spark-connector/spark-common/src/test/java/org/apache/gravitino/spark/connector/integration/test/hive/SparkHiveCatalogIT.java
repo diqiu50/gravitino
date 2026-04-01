@@ -24,12 +24,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.apache.gravitino.Catalog;
+import org.apache.gravitino.client.GravitinoMetalake;
 import org.apache.gravitino.spark.connector.GravitinoSparkConfig;
 import org.apache.gravitino.spark.connector.hive.HivePropertiesConstants;
+import org.apache.gravitino.spark.connector.iceberg.IcebergPropertiesConstants;
 import org.apache.gravitino.spark.connector.integration.test.SparkCommonIT;
 import org.apache.gravitino.spark.connector.integration.test.util.SparkTableInfo;
 import org.apache.gravitino.spark.connector.integration.test.util.SparkTableInfo.SparkColumnInfo;
 import org.apache.gravitino.spark.connector.integration.test.util.SparkTableInfoChecker;
+import org.apache.gravitino.spark.connector.version.CatalogNameAdaptor;
 import org.apache.hadoop.fs.Path;
 import org.apache.spark.sql.connector.catalog.TableCatalog;
 import org.apache.spark.sql.types.DataTypes;
@@ -56,6 +61,7 @@ public abstract class SparkHiveCatalogIT extends SparkCommonIT {
   protected Map<String, String> getCatalogConfigs() {
     Map<String, String> catalogProperties = Maps.newHashMap();
     catalogProperties.put(GravitinoSparkConfig.GRAVITINO_HIVE_METASTORE_URI, hiveMetastoreUri);
+    catalogProperties.put("list-all-tables", "true");
     return catalogProperties;
   }
 
@@ -516,5 +522,87 @@ public abstract class SparkHiveCatalogIT extends SparkCommonIT {
             SparkColumnInfo.of("id", DataTypes.IntegerType),
             SparkColumnInfo.of("ts", DataTypes.TimestampType));
     checkTableColumns(tableName, expectedSparkInfo, tableInfo);
+  }
+
+  @Test
+  void testHiveCatalogWithMixedTableTypes() {
+    // This test verifies that the Hive catalog (with list-all-tables=true) can:
+    // 1. Show both Hive and Iceberg tables in SHOW TABLES
+    // 2. Read data from a Hive table normally
+    // 3. Read data from an Iceberg table that lives in the same HMS database
+    String mixedDatabase = "mixed_types_test_db";
+    String hiveTableName = "hive_mixed_tbl";
+    String icebergTableName = "iceberg_mixed_tbl";
+    String icebergCatalogName = "iceberg_mixed_test";
+
+    // Register an Iceberg catalog pointing to the same HMS
+    GravitinoMetalake metalake = client.loadMetalake("test");
+    Map<String, String> icebergProps = Maps.newHashMap();
+    icebergProps.put(
+        IcebergPropertiesConstants.GRAVITINO_ICEBERG_CATALOG_BACKEND,
+        IcebergPropertiesConstants.ICEBERG_CATALOG_BACKEND_HIVE);
+    icebergProps.put(IcebergPropertiesConstants.GRAVITINO_ICEBERG_CATALOG_URI, hiveMetastoreUri);
+    icebergProps.put(IcebergPropertiesConstants.GRAVITINO_ICEBERG_CATALOG_WAREHOUSE, warehouse);
+    metalake.createCatalog(
+        icebergCatalogName, Catalog.Type.RELATIONAL, "lakehouse-iceberg", "", icebergProps);
+
+    // Dynamically register the Iceberg catalog in the Spark session so that
+    // "USE icebergCatalogName.database" is recognized as a catalog switch (not a namespace).
+    String icebergCatalogClass = CatalogNameAdaptor.getCatalogName("lakehouse-iceberg");
+    getSparkSession().conf().set("spark.sql.catalog." + icebergCatalogName, icebergCatalogClass);
+
+    try {
+      // Create the shared database and a Hive table via Hive catalog
+      createDatabaseIfNotExists(mixedDatabase, getProvider());
+      sql("USE " + getCatalogName() + "." + mixedDatabase);
+      sql("CREATE TABLE IF NOT EXISTS " + hiveTableName + " (id INT, name STRING)");
+      sql("INSERT INTO " + hiveTableName + " VALUES (1, 'hive_data')");
+
+      // Switch to Iceberg catalog and create an Iceberg table in the same database
+      sql("USE " + icebergCatalogName + "." + mixedDatabase);
+      sql(
+          "CREATE TABLE IF NOT EXISTS "
+              + icebergTableName
+              + " (id INT, name STRING) USING iceberg");
+      sql("INSERT INTO " + icebergTableName + " VALUES (2, 'iceberg_data')");
+
+      // Switch back to Hive catalog: both tables should be visible (list-all-tables=true)
+      sql("USE " + getCatalogName() + "." + mixedDatabase);
+      Set<String> tables = listTableNames();
+      Assertions.assertTrue(
+          tables.contains(hiveTableName), "Hive table should be visible via Hive catalog");
+      Assertions.assertTrue(
+          tables.contains(icebergTableName),
+          "Iceberg table should be visible via Hive catalog when list-all-tables=true");
+
+      // Read the Hive table via Hive catalog
+      List<String> hiveData = getTableData(hiveTableName);
+      Assertions.assertEquals(1, hiveData.size());
+      Assertions.assertEquals("1,hive_data", hiveData.get(0));
+
+      // Iceberg tables are transparently readable via Hive catalog when list-all-tables=true.
+      // GravitinoHiveCatalog detects table_type=ICEBERG and delegates to an internal Iceberg
+      // SparkCatalog backed by the same HMS, so no catalog switch is needed.
+      sql("USE " + getCatalogName() + "." + mixedDatabase);
+      List<String> icebergData = getTableData(icebergTableName);
+      Assertions.assertEquals(1, icebergData.size());
+      Assertions.assertEquals("2,iceberg_data", icebergData.get(0));
+
+    } finally {
+      // Cleanup Iceberg table via Iceberg catalog, Hive table via Hive catalog
+      try {
+        sql("USE " + icebergCatalogName + "." + mixedDatabase);
+        sql("DROP TABLE IF EXISTS " + icebergTableName);
+      } catch (Exception e) {
+        // ignore cleanup errors
+      }
+      try {
+        sql("USE " + getCatalogName() + "." + mixedDatabase);
+        sql("DROP TABLE IF EXISTS " + hiveTableName);
+      } catch (Exception e) {
+        // ignore cleanup errors
+      }
+      metalake.dropCatalog(icebergCatalogName, true);
+    }
   }
 }
