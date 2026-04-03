@@ -49,6 +49,7 @@ import org.apache.flink.table.api.internal.TableEnvironmentImpl;
 import org.apache.flink.table.catalog.Catalog;
 import org.apache.flink.table.catalog.CatalogBaseTable;
 import org.apache.flink.table.catalog.CatalogDescriptor;
+import org.apache.flink.table.catalog.CatalogPropertiesUtil;
 import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.CommonCatalogOptions;
 import org.apache.flink.table.catalog.DefaultCatalogTable;
@@ -1394,6 +1395,109 @@ public class FlinkHiveCatalogIT extends FlinkCommonIT {
   @Override
   protected String getProvider() {
     return "hive";
+  }
+
+  @Test
+  public void testHiveCatalogWithMixedTableFormats() {
+    String databaseName = "test_mixed_formats_db";
+    String hiveTableName = "hive_table";
+    String icebergTableName = "iceberg_table";
+
+    doWithSchema(
+        currentCatalog(),
+        databaseName,
+        catalog -> {
+          // Create native Hive table
+          TestUtils.assertTableResult(
+              sql(
+                  "CREATE TABLE %s (id INT, name STRING, age INT) WITH ('connector'='hive')",
+                  hiveTableName),
+              ResultKind.SUCCESS);
+
+          // Create generic table (using datagen connector with bounded rows)
+          TestUtils.assertTableResult(
+              sql(
+                  "CREATE TABLE %s (id INT, name STRING, age INT) WITH ("
+                      + "'connector'='datagen', "
+                      + "'number-of-rows'='10')",
+                  icebergTableName),
+              ResultKind.SUCCESS);
+
+          // Verify both tables are listed
+          String[] tables = tableEnv.listTables();
+          List<String> tableList = Arrays.asList(tables);
+          Assertions.assertTrue(tableList.contains(hiveTableName), "Should contain Hive table");
+          Assertions.assertTrue(
+              tableList.contains(icebergTableName), "Should contain generic table");
+
+          // Load tables via Gravitino API
+          Table hiveTable =
+              catalog.asTableCatalog().loadTable(NameIdentifier.of(databaseName, hiveTableName));
+          Table genericTable =
+              catalog.asTableCatalog().loadTable(NameIdentifier.of(databaseName, icebergTableName));
+
+          // Verify Hive table properties
+          Map<String, String> hiveProps = hiveTable.properties();
+          String hiveIsGeneric = hiveProps.get(CatalogPropertiesUtil.IS_GENERIC);
+          // Hive table should not have IS_GENERIC=true
+          Assertions.assertNotEquals(
+              "true", hiveIsGeneric, "Hive table should NOT have IS_GENERIC=true");
+
+          // Verify generic table properties
+          Map<String, String> props = genericTable.properties();
+
+          // 1. Check IS_GENERIC property
+          String isGeneric = props.get(CatalogPropertiesUtil.IS_GENERIC);
+          Assertions.assertEquals("true", isGeneric, "Generic table should have IS_GENERIC=true");
+
+          // 2. Verify flink.* properties exist
+          Assertions.assertTrue(
+              props.keySet().stream()
+                  .anyMatch(k -> k.startsWith(CatalogPropertiesUtil.FLINK_PROPERTY_PREFIX)),
+              "Generic table should have flink.* properties");
+
+          // 3. Verify connector type
+          String flinkConnector = props.get("flink.connector");
+          Assertions.assertEquals(
+              "datagen", flinkConnector, "Generic table connector should be datagen");
+
+          // Test data operations on Hive table
+          TestUtils.assertTableResult(
+              sql("INSERT INTO %s VALUES (1, 'Alice', 30), (2, 'Bob', 25)", hiveTableName),
+              ResultKind.SUCCESS_WITH_CONTENT,
+              Row.of(-1L));
+
+          TableResult hiveResult = tableEnv.executeSql("SELECT * FROM " + hiveTableName);
+          List<Row> hiveRows = Lists.newArrayList(hiveResult.collect());
+          Assertions.assertEquals(2, hiveRows.size(), "Hive table should have 2 rows");
+
+          // Test data read from generic table (datagen produces data)
+          TableResult genericResult = tableEnv.executeSql("SELECT * FROM " + icebergTableName);
+          List<Row> genericRows = Lists.newArrayList(genericResult.collect());
+          Assertions.assertTrue(
+              genericRows.size() > 0, "Generic table should have data from datagen");
+
+          // Test ALTER operations on generic table
+          TestUtils.assertTableResult(
+              sql("ALTER TABLE %s ADD score DOUBLE", icebergTableName), ResultKind.SUCCESS);
+
+          // Verify schema change persisted
+          Table alteredTable =
+              catalog.asTableCatalog().loadTable(NameIdentifier.of(databaseName, icebergTableName));
+          Map<String, String> alteredProps = alteredTable.properties();
+
+          // Still should be generic after ALTER
+          String alteredIsGeneric = alteredProps.get(CatalogPropertiesUtil.IS_GENERIC);
+          Assertions.assertEquals(
+              "true", alteredIsGeneric, "Altered table should still be generic");
+
+          // Should still have flink.* properties
+          Assertions.assertTrue(
+              alteredProps.keySet().stream()
+                  .anyMatch(k -> k.startsWith(CatalogPropertiesUtil.FLINK_PROPERTY_PREFIX)),
+              "Altered generic table should still have flink.* properties");
+        },
+        true);
   }
 
   @Override
