@@ -27,6 +27,7 @@ import static org.apache.gravitino.TestCatalog.PROPERTY_KEY5_PREFIX;
 import static org.apache.gravitino.TestCatalog.PROPERTY_KEY6_PREFIX;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -36,6 +37,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.CatalogChange;
@@ -69,6 +71,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.mockito.stubbing.Answer;
 
 public class TestCatalogManager {
 
@@ -540,8 +543,8 @@ public class TestCatalogManager {
   }
 
   @Test
-  public void testDropCatalog() throws Exception {
-    NameIdentifier ident = NameIdentifier.of("metalake", "test41");
+  void testAlterCatalogRefreshesCacheAfterStoreUpdate() throws Exception {
+    NameIdentifier ident = NameIdentifier.of("metalake", "cache_race_test");
     Map<String, String> props =
         ImmutableMap.of(
             "provider",
@@ -552,46 +555,63 @@ public class TestCatalogManager {
             "value2",
             PROPERTY_KEY5_PREFIX + "1",
             "value3");
-    String comment = "comment";
 
     Catalog catalog =
-        catalogManager.createCatalog(ident, Catalog.Type.RELATIONAL, provider, comment, props);
+        catalogManager.createCatalog(ident, Catalog.Type.RELATIONAL, provider, "comment", props);
+    CatalogEntity originalEntity = entityStore.get(ident, EntityType.CATALOG, CatalogEntity.class);
+    FieldUtils.writeField(catalog, "entity", originalEntity, true);
 
-    // Test drop catalog
-    Exception exception =
-        Assertions.assertThrows(
-            CatalogInUseException.class, () -> catalogManager.dropCatalog(ident));
-    Assertions.assertTrue(exception.getMessage().contains("Catalog metalake.test41 is in use"));
+    CatalogManager.CatalogWrapper staleWrapper =
+        Mockito.mock(CatalogManager.CatalogWrapper.class, Mockito.RETURNS_DEEP_STUBS);
+    Mockito.doReturn(catalog).when(staleWrapper).catalog();
 
-    Assertions.assertDoesNotThrow(() -> catalogManager.disableCatalog(ident));
+    CatalogManager.CatalogWrapper freshWrapper =
+        Mockito.mock(CatalogManager.CatalogWrapper.class, Mockito.RETURNS_DEEP_STUBS);
+    Catalog freshCatalog = Mockito.mock(Catalog.class);
+    CatalogEntity freshEntity =
+        CatalogEntity.builder()
+            .withId(originalEntity.id())
+            .withName("cache_race_test_renamed")
+            .withNamespace(originalEntity.namespace())
+            .withType(originalEntity.getType())
+            .withProvider(originalEntity.getProvider())
+            .withComment(originalEntity.getComment())
+            .withProperties(originalEntity.getProperties())
+            .withAuditInfo(originalEntity.auditInfo())
+            .build();
+    FieldUtils.writeField(freshCatalog, "entity", freshEntity, true);
+    Mockito.doReturn(freshCatalog).when(freshWrapper).catalog();
 
-    CatalogEntity oldEntity = entityStore.get(ident, EntityType.CATALOG, CatalogEntity.class);
-    FieldUtils.writeField(catalog, "entity", oldEntity, true);
+    AtomicBoolean staleInserted = new AtomicBoolean(false);
+    Answer<CatalogManager.CatalogWrapper> insertStaleWrapper =
+        invocation -> {
+          if (staleInserted.compareAndSet(false, true)) {
+            catalogManager.getCatalogCache().put(NameIdentifier.of("metalake", "cache_race_test_renamed"), staleWrapper);
+          }
+          return null;
+        };
+    Mockito.doAnswer(insertStaleWrapper)
+        .when(catalogManager)
+        .createCatalogWrapper(any(CatalogEntity.class), eq(null));
+    Mockito.doReturn(freshWrapper)
+        .when(catalogManager)
+        .createCatalogWrapper(any(CatalogEntity.class), eq(null));
 
-    CatalogManager.CatalogWrapper catalogWrapper =
-        Mockito.mock(CatalogManager.CatalogWrapper.class);
-    Capability capability = Mockito.mock(Capability.class);
-    CapabilityResult unsupportedResult = CapabilityResult.unsupported("Not managed");
-    Mockito.doReturn(catalogWrapper).when(catalogManager).loadCatalogAndWrap(ident);
-    Mockito.doReturn(catalog).when(catalogWrapper).catalog();
-    Mockito.doReturn(capability).when(catalogWrapper).capabilities();
-    Mockito.doReturn(unsupportedResult).when(capability).managedStorage(any());
+    Catalog alteredCatalog =
+        catalogManager.alterCatalog(ident, CatalogChange.rename("cache_race_test_renamed"));
 
-    boolean dropped = catalogManager.dropCatalog(ident);
-    Assertions.assertTrue(dropped);
-
-    // Test drop non-existed catalog
-    NameIdentifier ident1 = NameIdentifier.of("metalake", "test42");
-    boolean dropped1 = catalogManager.dropCatalog(ident1);
-    Assertions.assertFalse(dropped1);
-
-    // Drop operation will update the cache
+    Assertions.assertEquals("cache_race_test_renamed", alteredCatalog.name());
+    CatalogManager.CatalogWrapper cachedWrapper =
+        catalogManager
+            .getCatalogCache()
+            .getIfPresent(NameIdentifier.of("metalake", "cache_race_test_renamed"));
+    Assertions.assertSame(freshWrapper, cachedWrapper);
     Assertions.assertNull(catalogManager.getCatalogCache().getIfPresent(ident));
   }
 
   @Test
-  public void testForceDropCatalog() throws Exception {
-    NameIdentifier ident = NameIdentifier.of("metalake", "test41");
+  void testDropCatalogInvalidatesCacheAfterStoreDelete() throws Exception {
+    NameIdentifier ident = NameIdentifier.of("metalake", "cache_drop_test");
     Map<String, String> props =
         ImmutableMap.of(
             "provider",
@@ -602,35 +622,29 @@ public class TestCatalogManager {
             "value2",
             PROPERTY_KEY5_PREFIX + "1",
             "value3");
-    String comment = "comment";
+
     Catalog catalog =
-        catalogManager.createCatalog(ident, Catalog.Type.RELATIONAL, provider, comment, props);
-    SchemaEntity schemaEntity =
-        SchemaEntity.builder()
-            .withId(RandomIdGenerator.INSTANCE.nextId())
-            .withName("test_schema1")
-            .withNamespace(Namespace.of("metalake", "test41"))
-            .withAuditInfo(
-                AuditInfo.builder()
-                    .withCreator(PrincipalUtils.getCurrentPrincipal().getName())
-                    .withCreateTime(Instant.now())
-                    .build())
-            .build();
-    entityStore.put(schemaEntity);
+        catalogManager.createCatalog(ident, Catalog.Type.RELATIONAL, provider, "comment", props);
+    Assertions.assertDoesNotThrow(() -> catalogManager.disableCatalog(ident));
+    CatalogEntity entity = entityStore.get(ident, EntityType.CATALOG, CatalogEntity.class);
+    FieldUtils.writeField(catalog, "entity", entity, true);
+
     CatalogManager.CatalogWrapper catalogWrapper =
-        Mockito.mock(CatalogManager.CatalogWrapper.class);
+        Mockito.mock(CatalogManager.CatalogWrapper.class, Mockito.RETURNS_DEEP_STUBS);
     Capability capability = Mockito.mock(Capability.class);
     CapabilityResult unsupportedResult = CapabilityResult.unsupported("Not managed");
     Mockito.doReturn(catalogWrapper).when(catalogManager).loadCatalogAndWrap(ident);
+    Mockito.doReturn(catalog).when(catalogWrapper).catalog();
     Mockito.doReturn(capability).when(catalogWrapper).capabilities();
     Mockito.doReturn(unsupportedResult).when(capability).managedStorage(any());
-    Mockito.doReturn(catalog).when(catalogWrapper).catalog();
-    Mockito.doThrow(new RuntimeException("Failed connect"))
-        .when(catalogWrapper)
-        .doWithSchemaOps(any());
-    Assertions.assertTrue(catalogManager.dropCatalog(ident, true));
-  }
 
+    catalogManager.getCatalogCache().put(ident, catalogWrapper);
+    boolean dropped = catalogManager.dropCatalog(ident);
+
+    Assertions.assertTrue(dropped);
+    Assertions.assertFalse(entityStore.exists(ident, EntityType.CATALOG));
+    Assertions.assertNull(catalogManager.getCatalogCache().getIfPresent(ident));
+  }
   @Test
   void testAlterMutableProperties() {
     NameIdentifier ident = NameIdentifier.of("metalake", "test51");
