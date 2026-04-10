@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.function.Function;
 import org.apache.commons.lang3.reflect.FieldUtils;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.gravitino.Config;
 import org.apache.gravitino.Configs;
 import org.apache.gravitino.Entity;
@@ -59,7 +58,8 @@ public class TestRelationalEntityStore {
 
   @Test
   void testUpdateInvalidatesCacheAfterBackendUpdate()
-      throws IOException, NoSuchEntityException, EntityAlreadyExistsException, IllegalAccessException {
+      throws IOException, NoSuchEntityException, EntityAlreadyExistsException,
+          IllegalAccessException {
     NameIdentifier ident = NameIdentifier.of("metalake", "catalog");
     NoOpsCache cache = (NoOpsCache) FieldUtils.readField(store, "cache", true);
 
@@ -109,7 +109,8 @@ public class TestRelationalEntityStore {
     Mockito.doAnswer(
             invocation -> {
               Mockito.verify(cache, Mockito.never())
-                  .invalidate(src, Entity.EntityType.TABLE, SupportsRelationOperations.Type.TAG_REL);
+                  .invalidate(
+                      src, Entity.EntityType.TABLE, SupportsRelationOperations.Type.TAG_REL);
               Mockito.verify(cache, Mockito.never())
                   .invalidate(dst, Entity.EntityType.TAG, SupportsRelationOperations.Type.TAG_REL);
               return null;
@@ -132,7 +133,8 @@ public class TestRelationalEntityStore {
         true);
 
     InOrder inOrder = Mockito.inOrder(backend, cache);
-    inOrder.verify(backend)
+    inOrder
+        .verify(backend)
         .insertRelation(
             SupportsRelationOperations.Type.TAG_REL,
             src,
@@ -140,15 +142,18 @@ public class TestRelationalEntityStore {
             dst,
             Entity.EntityType.TAG,
             true);
-    inOrder.verify(cache)
+    inOrder
+        .verify(cache)
         .invalidate(src, Entity.EntityType.TABLE, SupportsRelationOperations.Type.TAG_REL);
-    inOrder.verify(cache)
+    inOrder
+        .verify(cache)
         .invalidate(dst, Entity.EntityType.TAG, SupportsRelationOperations.Type.TAG_REL);
   }
 
   @Test
   void testUpdateEntityRelationsInvalidatesCacheAfterBackendUpdate()
-      throws IOException, NoSuchEntityException, EntityAlreadyExistsException, IllegalAccessException {
+      throws IOException, NoSuchEntityException, EntityAlreadyExistsException,
+          IllegalAccessException {
     NameIdentifier src = NameIdentifier.of("metalake", "catalog", "schema", "table1");
     NameIdentifier destToAdd = NameIdentifier.of("metalake", "tag1");
     NameIdentifier destToRemove = NameIdentifier.of("metalake", "tag2");
@@ -159,7 +164,8 @@ public class TestRelationalEntityStore {
     Mockito.doAnswer(
             invocation -> {
               Mockito.verify(cache, Mockito.never())
-                  .invalidate(src, Entity.EntityType.TABLE, SupportsRelationOperations.Type.TAG_REL);
+                  .invalidate(
+                      src, Entity.EntityType.TABLE, SupportsRelationOperations.Type.TAG_REL);
               Mockito.verify(cache, Mockito.never())
                   .invalidate(
                       destToAdd, Entity.EntityType.TABLE, SupportsRelationOperations.Type.TAG_REL);
@@ -186,18 +192,22 @@ public class TestRelationalEntityStore {
         destEntitiesToRemove);
 
     InOrder inOrder = Mockito.inOrder(backend, cache);
-    inOrder.verify(backend)
+    inOrder
+        .verify(backend)
         .updateEntityRelations(
             SupportsRelationOperations.Type.TAG_REL,
             src,
             Entity.EntityType.TABLE,
             destEntitiesToAdd,
             destEntitiesToRemove);
-    inOrder.verify(cache)
+    inOrder
+        .verify(cache)
         .invalidate(src, Entity.EntityType.TABLE, SupportsRelationOperations.Type.TAG_REL);
-    inOrder.verify(cache)
+    inOrder
+        .verify(cache)
         .invalidate(destToAdd, Entity.EntityType.TABLE, SupportsRelationOperations.Type.TAG_REL);
-    inOrder.verify(cache)
+    inOrder
+        .verify(cache)
         .invalidate(destToRemove, Entity.EntityType.TABLE, SupportsRelationOperations.Type.TAG_REL);
   }
 }

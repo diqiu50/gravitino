@@ -51,19 +51,16 @@ import org.apache.gravitino.Namespace;
 import org.apache.gravitino.connector.capability.Capability;
 import org.apache.gravitino.connector.capability.CapabilityResult;
 import org.apache.gravitino.exceptions.CatalogAlreadyExistsException;
-import org.apache.gravitino.exceptions.CatalogInUseException;
 import org.apache.gravitino.exceptions.NoSuchCatalogException;
 import org.apache.gravitino.exceptions.NoSuchMetalakeException;
 import org.apache.gravitino.lock.LockManager;
 import org.apache.gravitino.meta.AuditInfo;
 import org.apache.gravitino.meta.BaseMetalake;
 import org.apache.gravitino.meta.CatalogEntity;
-import org.apache.gravitino.meta.SchemaEntity;
 import org.apache.gravitino.meta.SchemaVersion;
 import org.apache.gravitino.storage.RandomIdGenerator;
 import org.apache.gravitino.storage.memory.TestMemoryEntityStore;
 import org.apache.gravitino.storage.memory.TestMemoryEntityStore.InMemoryEntityStore;
-import org.apache.gravitino.utils.PrincipalUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -586,7 +583,9 @@ public class TestCatalogManager {
     Answer<CatalogManager.CatalogWrapper> insertStaleWrapper =
         invocation -> {
           if (staleInserted.compareAndSet(false, true)) {
-            catalogManager.getCatalogCache().put(NameIdentifier.of("metalake", "cache_race_test_renamed"), staleWrapper);
+            catalogManager
+                .getCatalogCache()
+                .put(NameIdentifier.of("metalake", "cache_race_test_renamed"), staleWrapper);
           }
           return null;
         };
@@ -645,6 +644,7 @@ public class TestCatalogManager {
     Assertions.assertFalse(entityStore.exists(ident, EntityType.CATALOG));
     Assertions.assertNull(catalogManager.getCatalogCache().getIfPresent(ident));
   }
+
   @Test
   void testAlterMutableProperties() {
     NameIdentifier ident = NameIdentifier.of("metalake", "test51");
