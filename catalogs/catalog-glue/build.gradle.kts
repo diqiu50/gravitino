@@ -88,7 +88,11 @@ tasks {
 }
 
 tasks.test {
-  dependsOn(tasks.jar)
+  val skipITs = project.hasProperty("skipITs")
+  if (skipITs) {
+    exclude("**/integration/test/**")
+    dependsOn(tasks.jar)
+  }
 }
 
 tasks.getByName("generateMetadataFileForMavenJavaPublication") {
