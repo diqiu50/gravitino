@@ -104,6 +104,13 @@ public class HiveTableConverter {
       org.apache.hadoop.hive.metastore.api.Table table) {
     Map<String, String> properties = Maps.newHashMap(table.getParameters());
 
+    // Explicitly preserve table_type parameter if it exists in HMS parameters
+    // This is critical for identifying Iceberg, Paimon, and other table formats
+    // The table_type parameter (with underscore) is different from tableType field (with hyphen)
+    if (table.getParameters() != null && table.getParameters().containsKey("table_type")) {
+      properties.put("table_type", table.getParameters().get("table_type"));
+    }
+
     Optional.ofNullable(table.getTableType()).ifPresent(t -> properties.put(TABLE_TYPE, t));
 
     StorageDescriptor sd = table.getSd();

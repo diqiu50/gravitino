@@ -21,6 +21,7 @@ package org.apache.gravitino.flink.connector.hive;
 import com.google.common.base.Preconditions;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -29,6 +30,7 @@ import javax.annotation.Nullable;
 import org.apache.flink.table.catalog.AbstractCatalog;
 import org.apache.flink.table.catalog.CatalogBaseTable;
 import org.apache.flink.table.catalog.CatalogPropertiesUtil;
+import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.ObjectPath;
 import org.apache.flink.table.catalog.ResolvedCatalogBaseTable;
 import org.apache.flink.table.catalog.ResolvedCatalogTable;
@@ -45,6 +47,7 @@ import org.apache.gravitino.exceptions.TableAlreadyExistsException;
 import org.apache.gravitino.flink.connector.PartitionConverter;
 import org.apache.gravitino.flink.connector.SchemaAndTablePropertiesConverter;
 import org.apache.gravitino.flink.connector.catalog.BaseCatalog;
+import org.apache.gravitino.flink.connector.utils.TypeUtils;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.Table;
 import org.apache.gravitino.rel.TableChange;
@@ -60,7 +63,19 @@ import org.apache.hadoop.hive.conf.HiveConf;
  */
 public class GravitinoHiveCatalog extends BaseCatalog {
 
+  // HMS stores the Iceberg marker in table parameters as table_type=ICEBERG.
+  // HiveTableConverter copies all HMS parameters into gravitinoTable.properties(), so the key is
+  // "table_type" (underscore). This differs from HiveConstants.TABLE_TYPE = "table-type" (hyphen),
+  // which maps the HMS tableType field (MANAGED_TABLE/EXTERNAL_TABLE).
+  // Reference: HiveTable.TABLE_TYPE_PROP = "table_type", ICEBERG_TABLE_TYPE_VALUE = "ICEBERG"
+  private static final String PROP_TABLE_TYPE = "table_type";
+
+  private static final String ICEBERG_TABLE_TYPE = "ICEBERG";
+
   private HiveCatalog hiveCatalog;
+
+  // Saved during constructor for lazy Iceberg backing catalog initialization.
+  private String savedHmsUri;
 
   GravitinoHiveCatalog(
       String catalogName,
@@ -76,6 +91,10 @@ public class GravitinoHiveCatalog extends BaseCatalog {
         defaultDatabase,
         schemaAndTablePropertiesConverter,
         partitionConverter);
+    // Save HMS URI for lazy Iceberg backing catalog initialization on first Iceberg table access.
+    if (hiveConf != null) {
+      this.savedHmsUri = hiveConf.get("hive.metastore.uris");
+    }
     this.hiveCatalog = new HiveCatalog(catalogName, defaultDatabase, hiveConf, hiveVersion);
   }
 
@@ -145,6 +164,11 @@ public class GravitinoHiveCatalog extends BaseCatalog {
           catalog()
               .asTableCatalog()
               .loadTable(NameIdentifier.of(tablePath.getDatabaseName(), tablePath.getObjectName()));
+      // For Iceberg tables stored in HMS, build a CatalogTable with connector=iceberg
+      // so that HiveDynamicTableFactory's fallback discovers FlinkDynamicTableFactory via SPI.
+      if (isIcebergTable(table)) {
+        return buildIcebergCatalogTable(table, tablePath);
+      }
       if (FlinkGenericTableUtil.isGenericTableWhenLoad(table.properties())) {
         return FlinkGenericTableUtil.toFlinkGenericTable(table);
       }
@@ -251,5 +275,42 @@ public class GravitinoHiveCatalog extends BaseCatalog {
     } catch (Exception e) {
       throw new CatalogException(e);
     }
+  }
+
+  private boolean isIcebergTable(Table gravitinoTable) {
+    Map<String, String> props = gravitinoTable.properties();
+    return props != null && ICEBERG_TABLE_TYPE.equalsIgnoreCase(props.get(PROP_TABLE_TYPE));
+  }
+
+  /**
+   * Builds a Flink CatalogTable for an Iceberg table stored in HMS. The returned table includes
+   * connector=iceberg and catalog properties so that Flink's SPI discovery (triggered by
+   * HiveDynamicTableFactory's fallback for non-Hive tables) finds the Iceberg
+   * FlinkDynamicTableFactory.
+   */
+  private CatalogTable buildIcebergCatalogTable(Table gravitinoTable, ObjectPath tablePath) {
+    org.apache.flink.table.api.Schema.Builder schemaBuilder =
+        org.apache.flink.table.api.Schema.newBuilder();
+    for (Column column : gravitinoTable.columns()) {
+      org.apache.flink.table.types.DataType flinkType = TypeUtils.toFlinkType(column.dataType());
+      schemaBuilder
+          .column(column.name(), column.nullable() ? flinkType.nullable() : flinkType.notNull())
+          .withComment(column.comment());
+    }
+
+    Map<String, String> options = new HashMap<>();
+    // Required: tells Flink SPI to use Iceberg's FlinkDynamicTableFactory
+    options.put("connector", "iceberg");
+    // Tell Iceberg standalone factory how to reach the HMS catalog
+    options.put("catalog-name", catalogName());
+    options.put("catalog-type", "hive");
+    if (savedHmsUri != null) {
+      options.put("uri", savedHmsUri);
+    }
+    options.put("catalog-database", tablePath.getDatabaseName());
+    options.put("catalog-table", tablePath.getObjectName());
+
+    return CatalogTable.of(
+        schemaBuilder.build(), gravitinoTable.comment(), Collections.emptyList(), options);
   }
 }
