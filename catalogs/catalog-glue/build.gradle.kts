@@ -47,8 +47,6 @@ dependencies {
   testImplementation(project(":common"))
   testImplementation(project(":core"))
 
-  testImplementation(libs.aws.glue)
-
   testImplementation(libs.junit.jupiter.api)
   testImplementation(libs.mockito.core)
   testImplementation(libs.slf4j.api)
@@ -93,6 +91,7 @@ tasks.test {
   val skipITs = project.hasProperty("skipITs")
   if (skipITs) {
     exclude("**/integration/test/**")
+  } else {
     dependsOn(tasks.jar)
   }
 }
