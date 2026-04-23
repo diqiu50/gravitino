@@ -26,9 +26,7 @@ import static org.apache.gravitino.catalog.glue.GlueConstants.SERDE_NAME;
 import static org.apache.gravitino.catalog.glue.GlueConstants.SERDE_PARAMETER_PREFIX;
 import static org.apache.gravitino.catalog.glue.GlueConstants.TABLE_TYPE;
 
-import com.google.common.base.Preconditions;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +37,6 @@ import org.apache.gravitino.connector.BaseTable;
 import org.apache.gravitino.connector.TableOperations;
 import org.apache.gravitino.meta.AuditInfo;
 import org.apache.gravitino.rel.Column;
-import org.apache.gravitino.rel.SupportsPartitions;
 import org.apache.gravitino.rel.expressions.NamedReference;
 import org.apache.gravitino.rel.expressions.distributions.Distribution;
 import org.apache.gravitino.rel.expressions.distributions.Distributions;
@@ -48,7 +45,6 @@ import org.apache.gravitino.rel.expressions.sorts.SortOrder;
 import org.apache.gravitino.rel.expressions.sorts.SortOrders;
 import org.apache.gravitino.rel.expressions.transforms.Transform;
 import org.apache.gravitino.rel.expressions.transforms.Transforms;
-import software.amazon.awssdk.services.glue.GlueClient;
 import software.amazon.awssdk.services.glue.model.StorageDescriptor;
 import software.amazon.awssdk.services.glue.model.Table;
 
@@ -62,44 +58,12 @@ import software.amazon.awssdk.services.glue.model.Table;
 @ToString
 public class GlueTable extends BaseTable {
 
-  /** Glue client injected after construction to support partition operations. */
-  private GlueClient glueClient;
-
-  /** Nullable — when null, Glue uses the caller's AWS account ID. */
-  private String catalogId;
-
-  /** Database (schema) this table belongs to. */
-  private String dbName;
-
   private GlueTable() {}
-
-  /**
-   * Injects the Glue connection context required for partition operations.
-   *
-   * <p>Called by {@link GlueCatalogOperations} after constructing a table instance.
-   */
-  void initOpsContext(GlueClient glueClient, String catalogId, String dbName) {
-    this.glueClient = glueClient;
-    this.catalogId = catalogId;
-    this.dbName = dbName;
-  }
 
   @Override
   protected TableOperations newOps() {
-    Preconditions.checkState(
-        glueClient != null,
-        "Partition operations require Glue context; call initOpsContext() first");
-    String[] partColNames =
-        Arrays.stream(partitioning)
-            .filter(t -> t instanceof Transforms.IdentityTransform)
-            .map(t -> ((Transforms.IdentityTransform) t).fieldName()[0])
-            .toArray(String[]::new);
-    return new GlueTableOperations(glueClient, catalogId, dbName, name, partColNames);
-  }
-
-  @Override
-  public SupportsPartitions supportPartitions() throws UnsupportedOperationException {
-    return (SupportsPartitions) ops();
+    throw new UnsupportedOperationException(
+        "Partition operations are not yet supported for GlueTable");
   }
 
   /**
@@ -117,22 +81,23 @@ public class GlueTable extends BaseTable {
    * table.parameters()} and passes through as-is.
    *
    * @param glueTable the Glue Table returned by the AWS SDK
+   * @param typeConverter the type converter to use for column type mapping
    * @return a populated {@link GlueTable}
    */
-  public static GlueTable fromGlueTable(Table glueTable) {
+  public static GlueTable fromGlueTable(Table glueTable, GlueTypeConverter typeConverter) {
     StorageDescriptor sd = glueTable.storageDescriptor();
 
     // --- Columns ---
     List<Column> columns = new ArrayList<>();
     if (sd != null && sd.hasColumns()) {
       for (software.amazon.awssdk.services.glue.model.Column c : sd.columns()) {
-        columns.add(GlueColumn.fromGlueColumn(c));
+        columns.add(GlueColumn.fromGlueColumn(c, typeConverter));
       }
     }
     List<String> partitionColNames = new ArrayList<>();
     if (glueTable.hasPartitionKeys()) {
       for (software.amazon.awssdk.services.glue.model.Column pk : glueTable.partitionKeys()) {
-        columns.add(GlueColumn.fromGlueColumn(pk));
+        columns.add(GlueColumn.fromGlueColumn(pk, typeConverter));
         partitionColNames.add(pk.name());
       }
     }
