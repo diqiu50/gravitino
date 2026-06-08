@@ -38,6 +38,7 @@ import org.apache.gravitino.function.FunctionParams;
 import org.apache.gravitino.function.FunctionType;
 import org.apache.gravitino.integration.test.container.ContainerSuite;
 import org.apache.gravitino.integration.test.container.HiveContainer;
+import org.apache.gravitino.rel.ViewCatalog;
 import org.apache.gravitino.rel.types.Types;
 import org.apache.gravitino.spark.connector.GravitinoSparkConfig;
 import org.apache.gravitino.spark.connector.functions.StringLengthFunction;
@@ -77,6 +78,10 @@ public abstract class SparkEnvIT extends SparkUtilIT {
   protected abstract String getCatalogName();
 
   protected abstract String getProvider();
+
+  protected ViewCatalog getGravitinoViewCatalog() {
+    return client.loadMetalake(metalakeName).loadCatalog(getCatalogName()).asViewCatalog();
+  }
 
   protected abstract Map<String, String> getCatalogConfigs();
 

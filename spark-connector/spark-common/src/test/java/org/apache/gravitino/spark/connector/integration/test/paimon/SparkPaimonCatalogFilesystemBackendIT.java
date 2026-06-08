@@ -30,6 +30,12 @@ import org.junit.jupiter.api.Test;
 public abstract class SparkPaimonCatalogFilesystemBackendIT extends SparkPaimonCatalogIT {
 
   @Override
+  protected boolean supportsViewOperation() {
+    // Paimon filesystem backend does not support view operations.
+    return false;
+  }
+
+  @Override
   protected Map<String, String> getCatalogConfigs() {
     Map<String, String> catalogProperties = Maps.newHashMap();
     catalogProperties.put(

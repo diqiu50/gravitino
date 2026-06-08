@@ -130,6 +130,11 @@ public abstract class SparkIcebergCatalogIT extends SparkCommonIT {
     return String.join(File.separator, table.getTableLocation(), "data");
   }
 
+  @Override
+  protected boolean supportsViewOperation() {
+    return true;
+  }
+
   @Test
   void testIcebergFileLevelDeleteOperation() {
     String tableName = "test_delete_table";

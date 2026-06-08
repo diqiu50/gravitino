@@ -23,11 +23,17 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.commons.io.FileUtils;
+import org.apache.gravitino.NameIdentifier;
+import org.apache.gravitino.rel.Column;
+import org.apache.gravitino.rel.Dialects;
+import org.apache.gravitino.rel.SQLRepresentation;
+import org.apache.gravitino.rel.types.Types;
 import org.apache.gravitino.spark.connector.ConnectorConstants;
 import org.apache.gravitino.spark.connector.integration.test.util.SparkTableInfo;
 import org.apache.gravitino.spark.connector.integration.test.util.SparkTableInfo.SparkColumnInfo;
@@ -127,6 +133,10 @@ public abstract class SparkCommonIT extends SparkEnvIT {
 
   protected boolean supportsCreateTableWithComment() {
     return true;
+  }
+
+  protected boolean supportsViewOperation() {
+    return false;
   }
 
   protected SparkTableInfoChecker getTableInfoChecker() {
@@ -1058,5 +1068,135 @@ public abstract class SparkCommonIT extends SparkEnvIT {
   protected void checkParquetFile(SparkTableInfo tableInfo) {
     String location = tableInfo.getTableLocation();
     Assertions.assertDoesNotThrow(() -> getSparkSession().read().parquet(location).printSchema());
+  }
+
+  // ── view tests ────────────────────────────────────────────────────────────
+
+  @Test
+  @EnabledIf("supportsViewOperation")
+  void testShowViews() {
+    String schema = getDefaultDatabase();
+    String view1 = "v_show_1";
+    String view2 = "v_show_2";
+    String tableName = "t_show_views";
+    dropViewIfExists(view1);
+    dropViewIfExists(view2);
+    dropTableIfExists(tableName);
+    try {
+      createSimpleTable(tableName);
+      createViewInGravitino(schema, view1, "SELECT id FROM " + tableName);
+      createViewInGravitino(schema, view2, "SELECT id, name FROM " + tableName);
+
+      Set<String> views = listViewNames(schema);
+      Assertions.assertTrue(views.contains(view1), "view1 not found in SHOW VIEWS");
+      Assertions.assertTrue(views.contains(view2), "view2 not found in SHOW VIEWS");
+      Assertions.assertFalse(views.contains(tableName), "table should not appear in SHOW VIEWS");
+    } finally {
+      dropViewIfExists(view1);
+      dropViewIfExists(view2);
+      dropTableIfExists(tableName);
+    }
+  }
+
+  @Test
+  @EnabledIf("supportsViewOperation")
+  void testSelectFromView() {
+    String schema = getDefaultDatabase();
+    String tableName = "t_view_select";
+    String viewName = "v_select";
+    dropViewIfExists(viewName);
+    dropTableIfExists(tableName);
+    try {
+      createSimpleTable(tableName);
+      sql(String.format("INSERT INTO %s VALUES (1, 'alice', 20), (2, 'bob', 25)", tableName));
+
+      createViewInGravitino(schema, viewName, "SELECT id, name FROM " + tableName);
+
+      List<String> result = getQueryData(SparkUtilIT.getSelectAllSqlWithOrder(viewName, "id"));
+      Assertions.assertEquals(2, result.size());
+      Assertions.assertEquals("1,alice", result.get(0));
+      Assertions.assertEquals("2,bob", result.get(1));
+    } finally {
+      dropViewIfExists(viewName);
+      dropTableIfExists(tableName);
+    }
+  }
+
+  @Test
+  @EnabledIf("supportsViewOperation")
+  void testSelectFromViewWithFilter() {
+    String schema = getDefaultDatabase();
+    String tableName = "t_view_filter";
+    String viewName = "v_filter";
+    dropViewIfExists(viewName);
+    dropTableIfExists(tableName);
+    try {
+      createSimpleTable(tableName);
+      sql(
+          String.format(
+              "INSERT INTO %s VALUES (1, 'alice', 20), (2, 'bob', 25), (3, 'carol', 30)",
+              tableName));
+
+      createViewInGravitino(schema, viewName, "SELECT id, name FROM " + tableName);
+
+      List<String> result = getQueryData(String.format("SELECT * FROM %s WHERE id = 2", viewName));
+      Assertions.assertEquals(1, result.size());
+      Assertions.assertEquals("2,bob", result.get(0));
+    } finally {
+      dropViewIfExists(viewName);
+      dropTableIfExists(tableName);
+    }
+  }
+
+  @Test
+  @EnabledIf("supportsViewOperation")
+  void testCreateViewUnsupported() {
+    // Spark wraps UnsupportedOperationException from createView() into AnalysisException.
+    // Use Exception.class to stay compatible across Spark versions (3.4/3.5 differ on subtype).
+    Exception ex =
+        Assertions.assertThrows(
+            Exception.class, () -> sql("CREATE VIEW v_unsupported AS SELECT 1 AS id"));
+    Throwable cause = ex;
+    boolean found = false;
+    while (cause != null) {
+      if (cause.getMessage() != null && cause.getMessage().contains("does not support")) {
+        found = true;
+        break;
+      }
+      cause = cause.getCause();
+    }
+    Assertions.assertTrue(found, "Expected 'does not support' in exception chain: " + ex);
+  }
+
+  // ── view helpers ──────────────────────────────────────────────────────────
+
+  private void createViewInGravitino(String schema, String viewName, String querySql) {
+    Column[] columns =
+        new Column[] {
+          Column.of("id", Types.IntegerType.get()), Column.of("name", Types.StringType.get())
+        };
+    getGravitinoViewCatalog()
+        .createView(
+            NameIdentifier.of(schema, viewName),
+            /* comment */ null,
+            columns,
+            new org.apache.gravitino.rel.Representation[] {
+              SQLRepresentation.builder().withDialect(Dialects.SPARK).withSql(querySql).build(),
+              SQLRepresentation.builder()
+                  .withDialect(Dialects.QUERY_DIALECT)
+                  .withSql(querySql)
+                  .build()
+            },
+            getCatalogName(),
+            schema,
+            Collections.emptyMap());
+  }
+
+  protected void dropViewIfExists(String viewName) {
+    try {
+      getGravitinoViewCatalog().dropView(NameIdentifier.of(getDefaultDatabase(), viewName));
+    } catch (Exception e) {
+      // ignore if view does not exist
+    }
   }
 }

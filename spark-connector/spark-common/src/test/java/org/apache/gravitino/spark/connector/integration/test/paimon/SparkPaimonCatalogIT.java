@@ -92,6 +92,11 @@ public abstract class SparkPaimonCatalogIT extends SparkCommonIT {
     return tableProperties.get(PaimonPropertiesConstants.PAIMON_TABLE_LOCATION);
   }
 
+  @Override
+  protected boolean supportsViewOperation() {
+    return true;
+  }
+
   @Test
   void testPaimonPartitions() {
     String partitionPathString = "name=a/address=beijing";

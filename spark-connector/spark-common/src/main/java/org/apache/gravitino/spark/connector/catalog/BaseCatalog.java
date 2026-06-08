@@ -23,6 +23,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.apache.commons.lang3.StringUtils;
@@ -41,6 +42,7 @@ import org.apache.gravitino.function.Function;
 import org.apache.gravitino.function.FunctionDefinition;
 import org.apache.gravitino.function.FunctionImpl;
 import org.apache.gravitino.function.JavaImpl;
+import org.apache.gravitino.rel.Dialects;
 import org.apache.gravitino.rel.View;
 import org.apache.gravitino.spark.connector.ConnectorConstants;
 import org.apache.gravitino.spark.connector.PropertiesConverter;
@@ -90,7 +92,7 @@ public abstract class BaseCatalog implements TableCatalog, SupportsNamespaces, F
   protected SparkTransformConverter sparkTransformConverter;
   // The Gravitino catalog client to do schema operations.
   protected Catalog gravitinoCatalogClient;
-  private SparkTypeConverter sparkTypeConverter;
+  protected SparkTypeConverter sparkTypeConverter;
   private SparkTableChangeConverter sparkTableChangeConverter;
 
   private String catalogName;
@@ -664,6 +666,16 @@ public abstract class BaseCatalog implements TableCatalog, SupportsNamespaces, F
           String.format("Failed to instantiate function class: %s", className), e);
     }
     throw new NoSuchFunctionException(ident);
+  }
+
+  /**
+   * Returns the SQL dialects to try when loading a view, in priority order. Subclasses may override
+   * to change the fallback order for their specific catalog type.
+   *
+   * @return ordered list of dialect identifiers (see {@link Dialects})
+   */
+  protected List<String> viewDialectFallbackOrder() {
+    return Arrays.asList(Dialects.SPARK, Dialects.HIVE);
   }
 
   protected Table loadSparkTable(Identifier ident) {
