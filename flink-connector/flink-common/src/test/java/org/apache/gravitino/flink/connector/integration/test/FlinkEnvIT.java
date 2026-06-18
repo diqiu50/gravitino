@@ -76,6 +76,8 @@ public abstract class FlinkEnvIT extends BaseIT {
   @BeforeAll
   @Override
   public void startIntegrationTest() throws Exception {
+    // Hook for subclasses to register server-side auth configs before the Gravitino server starts.
+    initAuthEnv();
     initHiveEnv();
     if (lakeHouseIcebergProvider.equalsIgnoreCase(getProvider())) {
       initIcebergRestServiceEnv();
@@ -103,6 +105,14 @@ public abstract class FlinkEnvIT extends BaseIT {
       throw new RuntimeException(e);
     }
   }
+
+  /**
+   * Hook for subclasses to register server-side authentication configs (via {@link
+   * #registerCustomConfigs}) before the Gravitino server is started. Default is a no-op.
+   *
+   * @throws Exception if the auth environment setup fails.
+   */
+  protected void initAuthEnv() throws Exception {}
 
   protected void initCatalogEnv() throws Exception {}
   ;
