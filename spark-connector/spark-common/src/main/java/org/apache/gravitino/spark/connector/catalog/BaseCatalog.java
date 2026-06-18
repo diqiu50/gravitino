@@ -463,7 +463,10 @@ public abstract class BaseCatalog implements TableCatalog, SupportsNamespaces, F
           gravitinoCatalogClient
               .asViewCatalog()
               .loadView(NameIdentifier.of(getDatabase(ident), ident.name()));
-    } catch (NoSuchViewException | UnsupportedOperationException | ForbiddenException e) {
+    } catch (NoSuchViewException
+        | UnsupportedOperationException
+        | ForbiddenException
+        | IllegalArgumentException e) {
       throw new NoSuchTableException(ident);
     }
     // Call sparkCatalog.loadTable directly to surface NoSuchTableException as checked,
@@ -494,7 +497,7 @@ public abstract class BaseCatalog implements TableCatalog, SupportsNamespaces, F
       return gravitinoCatalogClient
           .asTableCatalog()
           .loadTable(NameIdentifier.of(database, ident.name()));
-    } catch (org.apache.gravitino.exceptions.NoSuchTableException e) {
+    } catch (org.apache.gravitino.exceptions.NoSuchTableException | IllegalArgumentException e) {
       throw new NoSuchTableException(ident);
     }
   }

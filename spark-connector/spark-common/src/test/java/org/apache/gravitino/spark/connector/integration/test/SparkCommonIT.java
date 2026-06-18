@@ -33,6 +33,7 @@ import org.apache.gravitino.NameIdentifier;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.Dialects;
 import org.apache.gravitino.rel.SQLRepresentation;
+import org.apache.gravitino.rel.View;
 import org.apache.gravitino.rel.types.Types;
 import org.apache.gravitino.spark.connector.ConnectorConstants;
 import org.apache.gravitino.spark.connector.integration.test.util.SparkTableInfo;
@@ -1150,22 +1151,49 @@ public abstract class SparkCommonIT extends SparkEnvIT {
 
   @Test
   @EnabledIf("supportsViewOperation")
-  void testCreateViewUnsupported() {
-    // Spark wraps UnsupportedOperationException from createView() into AnalysisException.
-    // Use Exception.class to stay compatible across Spark versions (3.4/3.5 differ on subtype).
-    Exception ex =
-        Assertions.assertThrows(
-            Exception.class, () -> sql("CREATE VIEW v_unsupported AS SELECT 1 AS id"));
-    Throwable cause = ex;
-    boolean found = false;
-    while (cause != null) {
-      if (cause.getMessage() != null && cause.getMessage().contains("does not support")) {
-        found = true;
-        break;
-      }
-      cause = cause.getCause();
+  void testCreateAndDropViewViaSpark() {
+    String tableName = "t_create_view";
+    String viewName = "v_create_drop";
+    dropViewIfExists(viewName);
+    dropTableIfExists(tableName);
+    try {
+      createSimpleTable(tableName);
+      sql(String.format("INSERT INTO %s VALUES (1, 'alice', 20), (2, 'bob', 25)", tableName));
+
+      sql(
+          String.format(
+              "CREATE VIEW %s (id COMMENT 'pk') AS SELECT id FROM %s", viewName, tableName));
+
+      List<String> result = getQueryData(String.format("SELECT * FROM %s ORDER BY id", viewName));
+      Assertions.assertEquals(2, result.size());
+      Assertions.assertEquals("1", result.get(0));
+      Assertions.assertEquals("2", result.get(1));
+    } finally {
+      sql(String.format("DROP VIEW IF EXISTS %s", viewName));
+      dropTableIfExists(tableName);
     }
-    Assertions.assertTrue(found, "Expected 'does not support' in exception chain: " + ex);
+  }
+
+  @Test
+  @EnabledIf("supportsViewOperation")
+  void testAlterViewPropertiesViaSpark() {
+    String tableName = "t_alter_view";
+    String viewName = "v_alter_props";
+    dropViewIfExists(viewName);
+    dropTableIfExists(tableName);
+    try {
+      createSimpleTable(tableName);
+      sql(String.format("CREATE VIEW %s AS SELECT id FROM %s", viewName, tableName));
+
+      sql(String.format("ALTER VIEW %s SET TBLPROPERTIES ('test_key' = 'test_value')", viewName));
+
+      View gravitinoView =
+          getGravitinoViewCatalog().loadView(NameIdentifier.of(getDefaultDatabase(), viewName));
+      Assertions.assertEquals("test_value", gravitinoView.properties().get("test_key"));
+    } finally {
+      dropViewIfExists(viewName);
+      dropTableIfExists(tableName);
+    }
   }
 
   // ── view helpers ──────────────────────────────────────────────────────────
