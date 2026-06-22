@@ -2,8 +2,8 @@ call gravitino.system.create_catalog(
     'gt_glue_xxx1',
     'glue',
     map(
-        array['aws-region', 'aws-access-key-id', 'aws-secret-access-key', 'aws-glue-endpoint'],
-        array['${aws_region}', '${aws_access_key}', '${aws_secret_key}', '${?aws_glue_endpoint}']
+        array['aws-region', 'aws-access-key-id', 'aws-secret-access-key', 'warehouse'],
+        array['${aws_region}', '${aws_access_key}', '${aws_secret_key}', '${?warehouse}']
     )
 );
 
@@ -17,8 +17,8 @@ call gravitino.system.create_catalog(
     'gt_glue_xxx1',
     'glue',
     map(
-        array['aws-region', 'aws-access-key-id', 'aws-secret-access-key', 'aws-glue-endpoint'],
-        array['${aws_region}', '${aws_access_key}', '${aws_secret_key}', '${?aws_glue_endpoint}']
+        array['aws-region', 'aws-access-key-id', 'aws-secret-access-key', 'warehouse'],
+        array['${aws_region}', '${aws_access_key}', '${aws_secret_key}', '${?warehouse}']
     )
 );
 
