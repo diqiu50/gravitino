@@ -28,7 +28,9 @@ import io.trino.spi.TrinoException;
 import io.trino.spi.connector.Connector;
 import io.trino.spi.connector.ConnectorContext;
 import io.trino.spi.connector.ConnectorFactory;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.gravitino.client.GravitinoAdminClient;
 import org.apache.gravitino.trino.connector.catalog.CatalogConnectorContext;
@@ -140,6 +142,15 @@ public class GravitinoConnectorFactory implements ConnectorFactory {
           new GravitinoStoredProcedureFactory(catalogConnectorManager, metalake);
       return createSystemConnector(gravitinoStoredProcedureFactory);
     }
+  }
+
+  // Note: this method is not annotated with @Override because it does not exist in the
+  // ConnectorFactory interface of the baseline open-source Trino SPI version this connector
+  // compiles against. Some newer Trino/Starburst SPI versions declare it as an abstract method,
+  // where it is dispatched at runtime by signature, providing cross-version compatibility.
+  public Set<String> getSecuritySensitivePropertyNames(
+      String catalogName, Map<String, String> config, ConnectorContext context) {
+    return Collections.emptySet();
   }
 
   protected GravitinoConnector createConnector(CatalogConnectorContext connectorContext) {
