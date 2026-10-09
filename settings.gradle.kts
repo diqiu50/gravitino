@@ -71,7 +71,6 @@ val skipTrinoConnector: Boolean =
   gradle.startParameter.projectProperties["skipTrinoConnector"]?.toBoolean() ?: false
 if (!skipTrinoConnector) {
   include(
-    "trino-connector:trino-connector",
     "trino-connector:trino-connector-469-472",
     "trino-connector:trino-connector-473-479",
     "trino-connector:trino-connector-480",

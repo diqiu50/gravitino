@@ -119,7 +119,7 @@ tasks.test {
       println("Current project version: $version")
 
       // Check whether this module has already built
-      val trinoConnectorBuildDir = project(":trino-connector:trino-connector").buildDir
+      val trinoConnectorBuildDir = project(":trino-connector:trino-connector-469-472").buildDir
       if (trinoConnectorBuildDir.exists()) {
         // Check the version Gravitino related jars in build equal to the current project version
         val invalidGravitinoJars = trinoConnectorBuildDir.resolve("libs").listFiles { _, name -> name.startsWith("gravitino") }?.filter {
@@ -128,7 +128,7 @@ tasks.test {
         }
 
         if (invalidGravitinoJars!!.isNotEmpty()) {
-          val message = "Mismatched Gravitino JAR versions found in trino-connector/build/libs:\n" +
+          val message = "Mismatched Gravitino JAR versions found in trino-connector-469-472/build/libs:\n" +
             "${invalidGravitinoJars.joinToString(", ") { it.name }}\n" +
             "The expected project version is $version. Please clean and rebuild the project."
           throw GradleException(message)

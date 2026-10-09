@@ -81,11 +81,11 @@ dependencies {
 
 sourceSets {
   main {
-    java.srcDirs("../trino-connector/src/main/java", "../common-480-481/src/main/java")
+    java.srcDirs("../src/common/main/java", "../src/common-480-481/main/java")
   }
   test {
-    java.srcDirs("../trino-connector/src/test/java", "../common-480-481/src/test/java")
-    resources.srcDirs("../trino-connector/src/test/resources")
+    java.srcDirs("../src/common/test/java", "../src/common-480-481/test/java")
+    resources.srcDirs("../src/common/test/resources")
   }
 }
 
