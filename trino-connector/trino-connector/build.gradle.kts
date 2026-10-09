@@ -76,10 +76,10 @@ dependencies {
 // pre-480 shape classes.
 sourceSets {
   main {
-    java.srcDirs("../common-440-479/src/main/java")
+    java.srcDirs("../common-469-479/src/main/java")
   }
   test {
-    java.srcDirs("../common-440-479/src/test/java")
+    java.srcDirs("../common-469-479/src/test/java")
   }
 }
 

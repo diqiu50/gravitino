@@ -1353,9 +1353,6 @@ tasks {
   val assembleDistribution by registering(Tar::class) {
     dependsOn(
       compileDistribution,
-      ":trino-connector:trino-connector-440-445:assembleTrinoConnector",
-      ":trino-connector:trino-connector-446-451:assembleTrinoConnector",
-      ":trino-connector:trino-connector-452-468:assembleTrinoConnector",
       ":trino-connector:trino-connector-469-472:assembleTrinoConnector",
       ":trino-connector:trino-connector-473-479:assembleTrinoConnector",
       ":trino-connector:trino-connector-480:assembleTrinoConnector",

@@ -65,7 +65,7 @@ def legalTests = tasks.register('testMavenLegalFiles') {
     // Trino may be explicitly omitted from the build, but its listed files must still exist.
     def skippedSourceRoots = gradle.startParameter.projectProperties['skipTrinoConnector']?.equalsIgnoreCase('true')
       ? ['trino-connector/trino-connector/src/main/java',
-         'trino-connector/common-440-479/src/main/java',
+         'trino-connector/common-469-479/src/main/java',
          'trino-connector/common-480-481/src/main/java'].collect { file(it).canonicalFile.toPath() }
       : []
     def requireOwnedSources = { Collection sources ->
@@ -93,7 +93,7 @@ def legalTests = tasks.register('testMavenLegalFiles') {
         'trino-connector/trino-connector/src/main/java/org/apache/gravitino/trino/connector/util/json/AbstractTypedJacksonModule.java',
         'trino-connector/trino-connector/src/main/java/org/apache/gravitino/trino/connector/util/json/BlockJsonSerde.java',
         'trino-connector/trino-connector/src/main/java/org/apache/gravitino/trino/connector/util/json/TypeDeserializer.java',
-        'trino-connector/common-440-479/src/main/java/org/apache/gravitino/trino/connector/util/json/TypeSignatureDeserializer.java',
+        'trino-connector/common-469-479/src/main/java/org/apache/gravitino/trino/connector/util/json/TypeSignatureDeserializer.java',
         'trino-connector/common-480-481/src/main/java/org/apache/gravitino/trino/connector/util/json/TypeSignatureDeserializer.java'
       ]
     ].collectEntries { component, paths -> [(component): paths.collect { file(it).canonicalFile }.toSet()] }
