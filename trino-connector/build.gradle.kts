@@ -17,6 +17,20 @@
  * under the License.
  */
 
+import com.diffplug.gradle.spotless.SpotlessExtension
+
+// This project builds nothing of its own; it groups the per-Trino-version modules and owns the
+// common-* source trees they share. Only Spotless stays enabled, to format those trees.
 tasks.all {
-    enabled = false
+  enabled = name.startsWith("spotless")
+}
+
+// The common-* trees belong to no module, so no module's Spotless picks them up. Format them from
+// here, where they live, and keep the version modules scoped to their own trees.
+plugins.withId("com.diffplug.spotless") {
+  configure<SpotlessExtension> {
+    java {
+      target(project.fileTree(".") { include("common-*/src/**/*.java") })
+    }
+  }
 }

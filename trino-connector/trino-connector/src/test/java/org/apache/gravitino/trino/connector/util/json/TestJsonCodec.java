@@ -110,6 +110,11 @@ class TestJsonCodec {
         .isInstanceOf(NoSuchMethodException.class);
   }
 
+  @Test
+  void testMapperBuildsOnEverySupportedTrinoVersion() throws Exception {
+    assertThat(JsonCodec.createMapper(JsonCodec.createTypeManager(CLASS_LOADER))).isNotNull();
+  }
+
   /**
    * Round-trips a Trino {@link Block} (including a null position) through {@link BlockJsonSerde} so
    * the full serde path is exercised against the real Trino runtime of whichever version-segment

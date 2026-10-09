@@ -28,6 +28,8 @@ import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.connector.ConnectorSplitManager;
 import io.trino.spi.connector.SchemaTableName;
 import org.apache.gravitino.trino.connector.system.GravitinoSystemConnector;
+import org.apache.gravitino.trino.connector.system.SystemDatasourceProvider;
+import org.apache.gravitino.trino.connector.system.SystemSplitManager;
 import org.apache.gravitino.trino.connector.system.storedprocedure.GravitinoStoredProcedureFactory;
 import org.apache.gravitino.trino.connector.system.table.GravitinoSystemTableFactory;
 
@@ -49,7 +51,7 @@ public class GravitinoSystemConnector446 extends GravitinoSystemConnector {
     return new DatasourceProvider446(getSystemTableFactory());
   }
 
-  static class DatasourceProvider446 extends DatasourceProvider {
+  static class DatasourceProvider446 extends SystemDatasourceProvider {
 
     DatasourceProvider446(GravitinoSystemTableFactory systemTableFactory) {
       super(systemTableFactory);
@@ -61,7 +63,7 @@ public class GravitinoSystemConnector446 extends GravitinoSystemConnector {
     }
   }
 
-  static class GravitinoSplitManager446 extends SplitManager {
+  static class GravitinoSplitManager446 extends SystemSplitManager {
 
     protected ConnectorSplit createSplit(SchemaTableName tableName) {
       return new Split446(tableName, Split.getCurrentCoordinatorAddress());

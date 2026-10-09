@@ -22,22 +22,15 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.trino.spi.HostAddress;
 import io.trino.spi.Page;
-import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.ConnectorPageSource;
 import io.trino.spi.connector.ConnectorPageSourceProvider;
-import io.trino.spi.connector.ConnectorSession;
 import io.trino.spi.connector.ConnectorSplit;
 import io.trino.spi.connector.ConnectorSplitManager;
-import io.trino.spi.connector.ConnectorTableCredentials;
-import io.trino.spi.connector.ConnectorTableHandle;
-import io.trino.spi.connector.ConnectorTransactionHandle;
-import io.trino.spi.connector.DynamicFilter;
-import io.trino.spi.connector.MemoryContext;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.connector.SourcePage;
-import java.util.List;
-import java.util.Optional;
 import org.apache.gravitino.trino.connector.system.GravitinoSystemConnector;
+import org.apache.gravitino.trino.connector.system.SystemDatasourceProvider;
+import org.apache.gravitino.trino.connector.system.SystemSplitManager;
 import org.apache.gravitino.trino.connector.system.storedprocedure.GravitinoStoredProcedureFactory;
 import org.apache.gravitino.trino.connector.system.table.GravitinoSystemTableFactory;
 
@@ -66,25 +59,10 @@ public class GravitinoSystemConnector482 extends GravitinoSystemConnector {
     return new DatasourceProvider482(getSystemTableFactory());
   }
 
-  static class DatasourceProvider482 extends DatasourceProvider {
+  static class DatasourceProvider482 extends SystemDatasourceProvider {
 
     DatasourceProvider482(GravitinoSystemTableFactory systemTableFactory) {
       super(systemTableFactory);
-    }
-
-    // Trino 482 reworked createPageSource; delegate to the shared table-handle helper so system
-    // tables keep loading.
-    @Override
-    public ConnectorPageSource createPageSource(
-        ConnectorTransactionHandle transaction,
-        ConnectorSession session,
-        ConnectorSplit split,
-        ConnectorTableHandle table,
-        Optional<ConnectorTableCredentials> tableCredentials,
-        List<ColumnHandle> columns,
-        DynamicFilter dynamicFilter,
-        MemoryContext memoryContext) {
-      return createPageSource(table, columns);
     }
 
     @Override
@@ -93,7 +71,7 @@ public class GravitinoSystemConnector482 extends GravitinoSystemConnector {
     }
   }
 
-  static class SystemSplitManager482 extends SplitManager {
+  static class SystemSplitManager482 extends SystemSplitManager {
 
     @Override
     protected ConnectorSplit createSplit(SchemaTableName tableName) {

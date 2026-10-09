@@ -24,11 +24,9 @@ import io.trino.spi.type.BigintType;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for {@link TypeSignatures}. Because the shared test source is compiled and run by
- * every version-segment module, these tests pin the cross-version contract of the seam: the shared
- * {@code getTypeSignature()}-shaped class of Trino 440-481 and the {@code
- * getTypeDescriptor()}-shaped module-local copy of the 482-483 segment must produce the same
- * signatures.
+ * Unit tests for {@link TypeSignatures}. Every version module runs these tests, so the {@code
+ * getTypeSignature()}-shaped implementations of Trino 440-481 and the {@code
+ * getTypeDescriptor()}-shaped implementation of Trino 482-483 must produce the same signatures.
  */
 class TestTypeSignatures {
 

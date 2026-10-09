@@ -36,9 +36,7 @@ import java.util.Optional;
  *
  * <p>Trino 482 reworked {@code createPageSource}: the split-based (non-credential) variant was
  * removed and the primary read entry point takes an {@code Optional<ConnectorTableCredentials>} and
- * a {@link MemoryContext}, so this module-local copy shadows the shared split-based class (the
- * shared file is excluded from this module's source set) and delegates through the credential-aware
- * variants only.
+ * a {@link MemoryContext}, so only the credential-aware variant is implemented.
  */
 public class GravitinoDataSourceProvider implements ConnectorPageSourceProvider {
 

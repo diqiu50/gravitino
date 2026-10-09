@@ -33,10 +33,9 @@ import java.util.stream.Collectors;
 /**
  * Trino 482 reworked {@link ConnectorSplitSource#getNextBatch}: it now takes a {@link
  * DynamicFilterSnapshot} and returns a {@code CompletableFuture<List<ConnectorSplit>>} instead of
- * the removed {@code ConnectorSplitSource.ConnectorSplitBatch}. Because that return type no longer
- * exists, the shared {@code GravitinoSplitSource} cannot compile against the Trino 482 SPI and is
- * excluded from this module; this class provides a standalone Trino 482 split source instead. The
- * {@code getSplits} dispatch itself is inherited from {@link GravitinoSplitManager}.
+ * the removed {@code ConnectorSplitSource.ConnectorSplitBatch}, so this class provides a standalone
+ * Trino 482 split source. The {@code getSplits} dispatch itself is inherited from {@link
+ * GravitinoSplitManager}.
  */
 public class GravitinoSplitManager482 extends GravitinoSplitManager {
 

@@ -67,7 +67,7 @@ public class GravitinoConnector480 extends GravitinoConnector {
     ConnectorPageSourceProviderFactory internalConnectorPageSourceProviderFactory =
         internalConnector.getPageSourceProviderFactory();
     return () ->
-        new GravitinoDataSourceProvider480(
+        new GravitinoDataSourceProvider(
             internalConnectorPageSourceProviderFactory.createPageSourceProvider());
   }
 }

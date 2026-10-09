@@ -26,10 +26,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for {@link ColumnComments}. Because the shared test source is compiled and run by
- * every version-segment module, these tests pin the cross-version contract of the seam: the shared
- * String-shaped class of Trino 440-479 and the Optional-shaped module-local copies from Trino 480
- * on must behave identically.
+ * Unit tests for {@link ColumnComments}. Every version module runs these tests, so the
+ * String-shaped implementation of Trino 440-479 and the Optional-shaped implementations from Trino
+ * 480 on must behave identically.
  */
 class TestColumnComments {
 

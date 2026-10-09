@@ -25,8 +25,7 @@ import io.trino.spi.type.Type;
  * Type#getDisplayName()}.
  *
  * <p>Trino 482 removed {@code Type.getTypeSignature()} in favor of {@code getTypeDescriptor()},
- * whose {@code toString()} produces the equivalent representation, so this module-local copy
- * shadows the shared class (the shared file is excluded from this module's source set).
+ * whose {@code toString()} produces the equivalent representation.
  */
 public final class TypeSignatures {
 

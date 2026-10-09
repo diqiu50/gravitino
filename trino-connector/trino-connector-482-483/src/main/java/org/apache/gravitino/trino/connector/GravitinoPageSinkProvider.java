@@ -35,9 +35,8 @@ import java.util.Optional;
  * This class provides a ConnectorPageSink for Trino to write data to internal connector.
  *
  * <p>Trino 482 removed the non-credential {@code createPageSink}/{@code createMergeSink} variants
- * and made the credential-aware ones the SPI entry points, so this module-local copy shadows the
- * shared non-credential-shaped class (the shared file is excluded from this module's source set)
- * and delegates through the credential variants only.
+ * and made the credential-aware ones the SPI entry points, so only the credential variants are
+ * implemented.
  */
 public class GravitinoPageSinkProvider implements ConnectorPageSinkProvider {
 

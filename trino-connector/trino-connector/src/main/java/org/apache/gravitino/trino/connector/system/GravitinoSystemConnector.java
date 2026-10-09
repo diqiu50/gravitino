@@ -36,8 +36,6 @@ import io.trino.spi.connector.ConnectorSplitManager;
 import io.trino.spi.connector.ConnectorSplitSource;
 import io.trino.spi.connector.ConnectorTableHandle;
 import io.trino.spi.connector.ConnectorTransactionHandle;
-import io.trino.spi.connector.Constraint;
-import io.trino.spi.connector.DynamicFilter;
 import io.trino.spi.connector.FixedSplitSource;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.procedure.Procedure;
@@ -55,11 +53,8 @@ import org.apache.gravitino.trino.connector.system.table.GravitinoSystemTableFac
  * through Trino catalog configuration, a GravitinoSystemConnector is initially created. And it
  * provides some system tables and stored procedures of Gravitino connector.
  */
-// Trino 481 deprecates the split-based createPageSource for removal; it is still the only variant
-// available on 440-481. Trino 482 removes it and is handled by a separate version-segment module.
-// Trino 482 also deprecated ConnectorPageSource.getMemoryUsage, which SystemTablePageSource
-// overrides for older versions.
-@SuppressWarnings({"removal", "deprecation"})
+// Trino 482 deprecated ConnectorPageSource.getMemoryUsage, which SystemTablePageSource overrides.
+@SuppressWarnings("deprecation")
 public class GravitinoSystemConnector implements Connector {
 
   private final GravitinoStoredProcedureFactory gravitinoStoredProcedureFactory;
@@ -121,11 +116,11 @@ public class GravitinoSystemConnector implements Connector {
   public void shutdown() {}
 
   protected ConnectorSplitManager createSplitManager() {
-    return new SplitManager();
+    return new SystemSplitManager();
   }
 
   protected ConnectorPageSourceProvider createPageSourceProvider() {
-    return new DatasourceProvider(systemTableFactory);
+    return new SystemDatasourceProvider(systemTableFactory);
   }
 
   /** The transaction handle for Gravitino system connector. */
@@ -134,8 +129,11 @@ public class GravitinoSystemConnector implements Connector {
     INSTANCE
   }
 
-  /** The datasource provider. */
-  public static class DatasourceProvider implements ConnectorPageSourceProvider {
+  /**
+   * The datasource provider. The {@code createPageSource} SPI override, whose signature differs
+   * across Trino versions, lives in {@link SystemDatasourceProvider}.
+   */
+  public abstract static class DatasourceProvider implements ConnectorPageSourceProvider {
 
     private final GravitinoSystemTableFactory systemTableFactory;
 
@@ -148,22 +146,8 @@ public class GravitinoSystemConnector implements Connector {
       this.systemTableFactory = systemTableFactory;
     }
 
-    // Not annotated @Override: this split-based createPageSource is the SPI method up to Trino 481
-    // but was removed in Trino 482 (the 482-483 module supplies a MemoryContext-aware variant). It
-    // stays here for Trino 440-481.
-    public ConnectorPageSource createPageSource(
-        ConnectorTransactionHandle transaction,
-        ConnectorSession session,
-        ConnectorSplit split,
-        ConnectorTableHandle table,
-        List<ColumnHandle> columns,
-        DynamicFilter dynamicFilter) {
-      return createPageSource(table, columns);
-    }
-
     /**
-     * Loads the system-table page source for the given table handle. Shared by the version-specific
-     * {@code createPageSource} SPI overloads (the Trino 482 variant lives in the 482-483 module).
+     * Loads the system-table page source for the given table handle.
      *
      * @param table the system table handle
      * @param columns the columns requested by Trino
@@ -190,32 +174,19 @@ public class GravitinoSystemConnector implements Connector {
     }
   }
 
-  /** The split manager. */
-  public static class SplitManager implements ConnectorSplitManager {
+  /**
+   * The split manager. The {@code getSplits} SPI override, whose signature differs across Trino
+   * versions, lives in {@link SystemSplitManager}.
+   */
+  public abstract static class SplitManager implements ConnectorSplitManager {
 
-    // Not annotated @Override: this DynamicFilter variant is the SPI method up to Trino 481 but was
-    // replaced by the Set<ColumnHandle> variant in Trino 482. Kept for Trino 440-481.
-    public ConnectorSplitSource getSplits(
-        ConnectorTransactionHandle transaction,
-        ConnectorSession session,
-        ConnectorTableHandle connectorTableHandle,
-        DynamicFilter dynamicFilter,
-        Constraint constraint) {
-      return getSplits(connectorTableHandle);
-    }
-
-    // Not annotated @Override: this Set<ColumnHandle> variant is the SPI method from Trino 482
-    // onward; on Trino 440-481 it is an inert extra method.
-    public ConnectorSplitSource getSplits(
-        ConnectorTransactionHandle transaction,
-        ConnectorSession session,
-        ConnectorTableHandle connectorTableHandle,
-        Set<ColumnHandle> dynamicFilterColumns,
-        Constraint constraint) {
-      return getSplits(connectorTableHandle);
-    }
-
-    private ConnectorSplitSource getSplits(ConnectorTableHandle connectorTableHandle) {
+    /**
+     * Creates the split source for the given system table handle.
+     *
+     * @param connectorTableHandle the system table handle
+     * @return a split source with a single split for the system table
+     */
+    protected ConnectorSplitSource getSplits(ConnectorTableHandle connectorTableHandle) {
       SchemaTableName tableName =
           ((GravitinoSystemConnectorMetadata.SystemTableHandle) connectorTableHandle).getName();
       return new FixedSplitSource(createSplit(tableName));

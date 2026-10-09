@@ -24,9 +24,8 @@ import io.trino.spi.function.SchemaFunctionName;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for {@link SchemaFunctionNames}. Because the shared test source is compiled and run by
- * every version-segment module, these tests pin the cross-version contract of the seam: the shared
- * getter-shaped class of Trino 440-479 and the record-accessor-shaped module-local copies from
+ * Unit tests for {@link SchemaFunctionNames}. Every version module runs these tests, so the
+ * getter-shaped implementation of Trino 440-479 and the record-accessor-shaped implementations from
  * Trino 480 on must behave identically.
  */
 class TestSchemaFunctionNames {

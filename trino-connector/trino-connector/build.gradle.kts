@@ -17,6 +17,7 @@
  * under the License.
  */
 
+import com.diffplug.gradle.spotless.SpotlessExtension
 import net.ltgt.gradle.errorprone.errorprone
 
 plugins {
@@ -69,4 +70,24 @@ dependencies {
     exclude("org.apache.logging.log4j")
   }
   testRuntimeOnly(libs.junit.jupiter.engine)
+}
+
+// This module compiles against the minimum supported Trino version, so it also includes the
+// pre-480 shape classes.
+sourceSets {
+  main {
+    java.srcDirs("../common-440-479/src/main/java")
+  }
+  test {
+    java.srcDirs("../common-440-479/src/test/java")
+  }
+}
+
+plugins.withId("com.diffplug.spotless") {
+  configure<SpotlessExtension> {
+    java {
+      // Keep Spotless within this module to avoid cross-project target errors.
+      target(project.fileTree("src") { include("**/*.java") })
+    }
+  }
 }

@@ -35,9 +35,7 @@ import java.util.stream.Collectors;
  * This class delegates the retrieval of split data sources to optimize query performance.
  *
  * <p>Trino 482 replaced {@code ConnectorSplitManager.getSplits}'s {@code DynamicFilter} parameter
- * with a {@code Set<ColumnHandle>} of dynamic-filter columns, so this module-local copy shadows the
- * shared DynamicFilter-shaped class (the shared file is excluded from this module's source set) and
- * delegates through the {@code Set<ColumnHandle>} variant only.
+ * with a {@code Set<ColumnHandle>} of dynamic-filter columns, so only that variant is implemented.
  */
 public class GravitinoSplitManager implements ConnectorSplitManager {
 
