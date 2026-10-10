@@ -15,17 +15,19 @@ The Gravitino Trino connector supports multiple Trino versions (see [Requirement
 
 ```text
 trino-connector/
-├── trino-connector/              # Shared base source code
-│   └── src/main/java/            # Common implementation used by all versions
-├── trino-connector-440-445/      # Version-specific adapters for Trino 440-445
-│   └── src/main/java/
-├── trino-connector-446-451/      # Version-specific adapters for Trino 446-451
-│   └── src/main/java/
-├── trino-connector-452-468/      # Version-specific adapters for Trino 452-468
-│   └── src/main/java/
+├── src/common/                   # Shared base source code
+│   └── main/java/                # Common implementation used by all versions
 ├── trino-connector-469-472/      # Version-specific adapters for Trino 469-472
 │   └── src/main/java/
-├── trino-connector-473-478/      # Version-specific adapters for Trino 473-478
+├── trino-connector-473-477/      # Version-specific adapters for Trino 473-477
+│   └── src/main/java/
+├── trino-connector-478-479/      # Version-specific adapters for Trino 478-479
+│   └── src/main/java/
+├── trino-connector-480/          # Version-specific adapters for Trino 480
+│   └── src/main/java/
+├── trino-connector-481/          # Version-specific adapters for Trino 481
+│   └── src/main/java/
+├── trino-connector-482-483/      # Version-specific adapters for Trino 482-483
 │   └── src/main/java/
 └── integration-test/             # Integration tests
 ```
@@ -69,11 +71,12 @@ Change `localhost`, `port`, and the names of metalake and catalogs to match your
 
    | Trino Version | Version-Segment Module    |
    |---------------|---------------------------|
-   | 440-445       | `trino-connector-440-445` |
-   | 446-451       | `trino-connector-446-451` |
-   | 452-468       | `trino-connector-452-468` |
    | 469-472       | `trino-connector-469-472` |
-   | 473-478       | `trino-connector-473-478` |
+   | 473-477       | `trino-connector-473-477` |
+   | 478-479       | `trino-connector-478-479` |
+   | 480           | `trino-connector-480`     |
+   | 481           | `trino-connector-481`     |
+   | 482-483       | `trino-connector-482-483` |
 
 5. Add `<module>plugin/trino-gravitino</module>` to `trino/pom.xml` and create the `pom.xml` for the `trino-gravitino` module. The example below uses Trino `469`. Ensure the `trino-root` version matches the Trino version you are developing against.
 
@@ -220,7 +223,7 @@ Change `localhost`, `port`, and the names of metalake and catalogs to match your
                         <configuration>
                             <sources>
                                 <!-- Shared base source -->
-                                <source>/path/to/gravitino/trino-connector/trino-connector/src/main/java</source>
+                                <source>/path/to/gravitino/trino-connector/src/common/main/java</source>
                                 <!-- Version-segment source (change to match your Trino version) -->
                                 <source>/path/to/gravitino/trino-connector/trino-connector-469-472/src/main/java</source>
                             </sources>

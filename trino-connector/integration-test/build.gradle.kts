@@ -86,11 +86,12 @@ dependencies {
 
 tasks.register("setupDependencies") {
   dependsOn(":bundles:aws-bundle:jar", ":bundles:iceberg-aws-bundle:jar")
-  dependsOn(":trino-connector:trino-connector-440-445:copyLibs")
-  dependsOn(":trino-connector:trino-connector-446-451:copyLibs")
-  dependsOn(":trino-connector:trino-connector-452-468:copyLibs")
   dependsOn(":trino-connector:trino-connector-469-472:copyLibs")
-  dependsOn(":trino-connector:trino-connector-473-478:copyLibs")
+  dependsOn(":trino-connector:trino-connector-473-477:copyLibs")
+  dependsOn(":trino-connector:trino-connector-478-479:copyLibs")
+  dependsOn(":trino-connector:trino-connector-480:copyLibs")
+  dependsOn(":trino-connector:trino-connector-481:copyLibs")
+  dependsOn(":trino-connector:trino-connector-482-483:copyLibs")
   dependsOn(":catalogs:catalog-lakehouse-iceberg:jar", ":catalogs:catalog-lakehouse-iceberg:runtimeJars")
   dependsOn(":catalogs:catalog-jdbc-mysql:jar", ":catalogs:catalog-jdbc-mysql:runtimeJars")
   dependsOn(":catalogs:catalog-jdbc-postgresql:jar", ":catalogs:catalog-jdbc-postgresql:runtimeJars")
@@ -119,7 +120,7 @@ tasks.test {
       println("Current project version: $version")
 
       // Check whether this module has already built
-      val trinoConnectorBuildDir = project(":trino-connector:trino-connector").buildDir
+      val trinoConnectorBuildDir = project(":trino-connector:trino-connector-469-472").buildDir
       if (trinoConnectorBuildDir.exists()) {
         // Check the version Gravitino related jars in build equal to the current project version
         val invalidGravitinoJars = trinoConnectorBuildDir.resolve("libs").listFiles { _, name -> name.startsWith("gravitino") }?.filter {
@@ -128,7 +129,7 @@ tasks.test {
         }
 
         if (invalidGravitinoJars!!.isNotEmpty()) {
-          val message = "Mismatched Gravitino JAR versions found in trino-connector/build/libs:\n" +
+          val message = "Mismatched Gravitino JAR versions found in trino-connector-469-472/build/libs:\n" +
             "${invalidGravitinoJars.joinToString(", ") { it.name }}\n" +
             "The expected project version is $version. Please clean and rebuild the project."
           throw GradleException(message)
