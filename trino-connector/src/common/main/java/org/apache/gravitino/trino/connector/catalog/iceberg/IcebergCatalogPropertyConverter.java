@@ -175,8 +175,18 @@ public class IcebergCatalogPropertyConverter extends CatalogPropertyConverter {
     Map<String, String> config = new HashMap<>();
     // Later put/putAll calls override earlier ones for the same key; this is call-order
     // precedence, unrelated to HashMap's (unspecified) iteration order.
-    config.putAll(buildStorageProperties(catalog.getProperties()));
-    config.put(TRINO_ICEBERG_REST_VENDED_CREDENTIALS, "true");
+    Map<String, String> storageProperties = buildStorageProperties(catalog.getProperties());
+    config.putAll(storageProperties);
+    // Trino 482 dropped the fallback to the Hadoop file system when no vended credential is
+    // actually present for a table (older versions used it whenever none of the per-scheme
+    // credential providers applied, e.g. for HDFS); it now always routes through the REST-only
+    // file system, which rejects any scheme without a native Trino file system. Only default this
+    // on for warehouse schemes that have one.
+    boolean vendedCredentialsSupported =
+        Boolean.parseBoolean(storageProperties.get(TRINO_FS_NATIVE_S3_ENABLED))
+            || Boolean.parseBoolean(storageProperties.get(TRINO_FS_NATIVE_GCS_ENABLED))
+            || Boolean.parseBoolean(storageProperties.get(TRINO_FS_NATIVE_AZURE_ENABLED));
+    config.put(TRINO_ICEBERG_REST_VENDED_CREDENTIALS, String.valueOf(vendedCredentialsSupported));
     // The catalog's own trino.bypass properties override the defaults above, so that a Trino
     // release renaming one of them can be worked around without a connector change.
     config.putAll(super.gravitinoToEngineProperties(catalog.getProperties()));

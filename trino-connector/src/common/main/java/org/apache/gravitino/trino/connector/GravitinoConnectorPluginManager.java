@@ -20,6 +20,7 @@ package org.apache.gravitino.trino.connector;
 
 import static org.apache.gravitino.trino.connector.GravitinoConfig.TRINO_PLUGIN_BUNDLES;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import io.airlift.log.Logger;
@@ -31,6 +32,7 @@ import io.trino.spi.connector.Connector;
 import io.trino.spi.connector.ConnectorContext;
 import io.trino.spi.connector.ConnectorFactory;
 import java.io.File;
+import java.lang.reflect.Field;
 import java.net.URL;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -51,7 +53,16 @@ public class GravitinoConnectorPluginManager {
 
   private static final String PLUGIN_NAME_PREFIX = "gravitino-";
   private static final String PLUGIN_CLASSLOADER_CLASS_NAME = "io.trino.server.PluginClassLoader";
-  static final List<String> PARENT_FIRST_PACKAGES =
+  private static final String PLUGIN_MANAGER_CLASS_NAME = "io.trino.server.PluginManager";
+  private static final String SPI_PACKAGES_FIELD_NAME = "SPI_PACKAGES";
+
+  /**
+   * Used only if {@link #SPI_PACKAGES_FIELD_NAME} cannot be read from the running Trino's {@link
+   * #PLUGIN_MANAGER_CLASS_NAME} (see {@link #loadParentFirstPackages(ClassLoader)}): a snapshot of
+   * that list as of Trino 440, missing anything a later Trino release added to it (e.g. Trino 482
+   * added {@code org.locationtech.jts.}, needed by the Iceberg connector's Parquet writer).
+   */
+  static final List<String> PARENT_FIRST_PACKAGES_FALLBACK =
       List.of(
           "io.trino.spi.",
           "com.fasterxml.jackson.annotation.",
@@ -65,12 +76,14 @@ public class GravitinoConnectorPluginManager {
   private static volatile GravitinoConnectorPluginManager instance;
 
   private Class<?> pluginLoaderClass;
+  private final List<String> parentFirstPackages;
 
   private final Map<String, Plugin> connectorPlugins = new HashMap<>();
   private final ClassLoader appClassloader;
 
   private GravitinoConnectorPluginManager(ClassLoader classLoader) {
     this.appClassloader = classLoader;
+    this.parentFirstPackages = loadParentFirstPackages(classLoader);
 
     try {
       pluginLoaderClass = appClassloader.loadClass(PLUGIN_CLASSLOADER_CLASS_NAME);
@@ -117,6 +130,32 @@ public class GravitinoConnectorPluginManager {
    * @return the singleton instance of GravitinoConnectorPluginManager
    * @throws IllegalStateException if instance(ClassLoader) has not been called first
    */
+  /**
+   * Reads the running Trino's own list of parent-first packages ({@code
+   * io.trino.server.PluginManager.SPI_PACKAGES}), so a reloaded internal connector (e.g. Iceberg)
+   * resolves its dependencies exactly as Trino's own plugin loading does. That list is not part of
+   * the Trino SPI and changes across Trino releases (Trino 482 added {@code org.locationtech.jts.}
+   * for the Iceberg connector's Parquet writer), so it can only be read reflectively; {@link
+   * #PARENT_FIRST_PACKAGES_FALLBACK} is used if it cannot be read.
+   */
+  @SuppressWarnings("unchecked")
+  @VisibleForTesting
+  static List<String> loadParentFirstPackages(ClassLoader classLoader) {
+    try {
+      Class<?> pluginManagerClass = classLoader.loadClass(PLUGIN_MANAGER_CLASS_NAME);
+      Field field = pluginManagerClass.getDeclaredField(SPI_PACKAGES_FIELD_NAME);
+      field.setAccessible(true);
+      return List.copyOf((List<String>) field.get(null));
+    } catch (Exception e) {
+      LOG.warn(
+          e,
+          "Cannot read %s.%s; falling back to a hardcoded list of parent-first packages",
+          PLUGIN_MANAGER_CLASS_NAME,
+          SPI_PACKAGES_FIELD_NAME);
+      return PARENT_FIRST_PACKAGES_FALLBACK;
+    }
+  }
+
   public static GravitinoConnectorPluginManager instance() {
     if (instance == null) {
       throw new IllegalStateException("Need to call the function instance(ClassLoader) first");
@@ -180,7 +219,7 @@ public class GravitinoConnectorPluginManager {
       // The classloader name will use to serialize the Handle object
       String classLoaderName = PLUGIN_NAME_PREFIX + pluginName;
       // Load Trino SPI package and other dependencies refer to io.trino.server.PluginClassLoader
-      Object pluginClassLoader = newPluginClassLoader(classLoaderName, urls, PARENT_FIRST_PACKAGES);
+      Object pluginClassLoader = newPluginClassLoader(classLoaderName, urls, parentFirstPackages);
 
       ServiceLoader<Plugin> serviceLoader =
           ServiceLoader.load(Plugin.class, (ClassLoader) pluginClassLoader);

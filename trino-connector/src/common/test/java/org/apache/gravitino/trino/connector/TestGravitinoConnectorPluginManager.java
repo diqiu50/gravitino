@@ -26,7 +26,32 @@ class TestGravitinoConnectorPluginManager {
 
   @Test
   void testStarburstAiModelUsesApplicationClassLoader() {
-    assertThat(GravitinoConnectorPluginManager.PARENT_FIRST_PACKAGES)
+    assertThat(GravitinoConnectorPluginManager.PARENT_FIRST_PACKAGES_FALLBACK)
         .contains("io.starburst.ai.model.");
+  }
+
+  @Test
+  void testLoadParentFirstPackagesReadsTrinoOwnList() {
+    // io.trino.server.PluginManager.SPI_PACKAGES is on the test classpath via trino-main; reading
+    // it should return Trino's own list for this module's Trino version, not just fall back to
+    // our hardcoded snapshot (which was never updated for org.locationtech.jts., added in Trino
+    // 482 for the Iceberg connector's Parquet writer).
+    assertThat(
+            GravitinoConnectorPluginManager.loadParentFirstPackages(
+                Thread.currentThread().getContextClassLoader()))
+        .contains("io.trino.spi.");
+  }
+
+  @Test
+  void testLoadParentFirstPackagesFallsBackWhenPluginManagerIsUnavailable() {
+    ClassLoader classLoaderWithoutTrinoMain =
+        new ClassLoader(null) {
+          @Override
+          public Class<?> loadClass(String name) throws ClassNotFoundException {
+            throw new ClassNotFoundException(name);
+          }
+        };
+    assertThat(GravitinoConnectorPluginManager.loadParentFirstPackages(classLoaderWithoutTrinoMain))
+        .isEqualTo(GravitinoConnectorPluginManager.PARENT_FIRST_PACKAGES_FALLBACK);
   }
 }

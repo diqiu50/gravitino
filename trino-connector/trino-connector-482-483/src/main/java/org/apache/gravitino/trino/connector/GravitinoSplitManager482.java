@@ -65,8 +65,15 @@ public class GravitinoSplitManager482 extends GravitinoSplitManager {
     @Override
     public CompletableFuture<List<ConnectorSplit>> getNextBatch(
         int maxSize, DynamicFilterSnapshot dynamicFilterSnapshot) {
+      // The engine builds the snapshot's predicate from the ColumnHandle objects it was given,
+      // which are our wrapped GravitinoColumnHandle; the internal split source expects its own
+      // unwrapped column handles (e.g. JdbcColumnHandle).
+      DynamicFilterSnapshot unwrappedSnapshot =
+          new DynamicFilterSnapshot(
+              dynamicFilterSnapshot.currentPredicate().transformKeys(GravitinoHandle::unWrap),
+              dynamicFilterSnapshot.isComplete());
       return connectorSplitSource
-          .getNextBatch(maxSize, dynamicFilterSnapshot)
+          .getNextBatch(maxSize, unwrappedSnapshot)
           .thenApply(
               splits ->
                   splits.stream()

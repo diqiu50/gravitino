@@ -58,6 +58,10 @@ dependencies {
   implementation(libs.commons.lang3)
   implementation("io.trino:trino-jdbc:$trinoVersion")
   runtimeOnly("io.opentelemetry.semconv:opentelemetry-semconv:$otelSemconvVersion")
+  // Trino 482+ serializes remote-task results using Jackson Blackbird for classes defined by
+  // this plugin; every Trino-bundled plugin carries its own copy for the same reason, since the
+  // plugin classloader does not see Trino's own copy of this module.
+  runtimeOnly("com.fasterxml.jackson.module:jackson-module-blackbird:2.22.0")
   compileOnly(libs.airlift.resolver)
   compileOnly("io.trino:trino-spi:$trinoVersion") {
     exclude("org.apache.logging.log4j")

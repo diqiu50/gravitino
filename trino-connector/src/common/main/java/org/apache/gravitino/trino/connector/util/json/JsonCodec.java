@@ -311,6 +311,29 @@ public class JsonCodec {
     objectMapper.registerModule(
         new AbstractTypedJacksonModule<>(
             ConnectorTableExecuteHandle.class, nameResolver, classResolver) {});
+
+    // ConnectorTableCredentials does not exist on Trino SPI versions before 480, so it is loaded
+    // by name rather than imported, and skipped where absent.
+    registerModuleIfPresent(
+        objectMapper,
+        "io.trino.spi.connector.ConnectorTableCredentials",
+        nameResolver,
+        classResolver);
+  }
+
+  @SuppressWarnings({"unchecked", "rawtypes"})
+  private static void registerModuleIfPresent(
+      ObjectMapper objectMapper,
+      String className,
+      Function<Object, String> nameResolver,
+      Function<String, Class<?>> classResolver) {
+    try {
+      Class<?> baseClass = JsonCodec.class.getClassLoader().loadClass(className);
+      objectMapper.registerModule(
+          new AbstractTypedJacksonModule((Class) baseClass, nameResolver, classResolver) {});
+    } catch (ClassNotFoundException ignored) {
+      // Not present on this Trino SPI version; nothing to register.
+    }
   }
 
   @VisibleForTesting

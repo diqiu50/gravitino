@@ -262,6 +262,26 @@ public class TestIcebergCatalogPropertyConverter {
   }
 
   @Test
+  public void testBuildConnectorPropertiesDisablesVendedCredentialsForHdfsWarehouse()
+      throws Exception {
+    // Trino's REST-catalog file system only supports vended credentials for s3/s3a/s3n, gs and
+    // abfs/abfss/wasb/wasbs; enabling it for an HDFS (or local) warehouse makes every table access
+    // fail with "Unsupported location scheme for vended credentials".
+    Map<String, String> properties =
+        ImmutableMap.<String, String>builder()
+            .put("uri", "thrift://localhost:9083")
+            .put("catalog-backend", "hive")
+            .put("warehouse", "hdfs://localhost:9000/user/iceberg/warehouse")
+            .build();
+
+    Map<String, String> config =
+        buildConnectorConfig(
+            "catalog1", properties, icebergRestConfiguredConfig(ImmutableMap.of()));
+
+    Assertions.assertEquals("false", config.get("iceberg.rest-catalog.vended-credentials-enabled"));
+  }
+
+  @Test
   public void testBuildConnectorPropertiesRoutesHiveBackendThroughIcebergRest() throws Exception {
     Map<String, String> properties =
         ImmutableMap.<String, String>builder()
