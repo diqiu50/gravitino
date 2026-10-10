@@ -1354,7 +1354,8 @@ tasks {
     dependsOn(
       compileDistribution,
       ":trino-connector:trino-connector-469-472:assembleTrinoConnector",
-      ":trino-connector:trino-connector-473-479:assembleTrinoConnector",
+      ":trino-connector:trino-connector-473-477:assembleTrinoConnector",
+      ":trino-connector:trino-connector-478-479:assembleTrinoConnector",
       ":trino-connector:trino-connector-480:assembleTrinoConnector",
       ":trino-connector:trino-connector-481:assembleTrinoConnector",
       ":trino-connector:trino-connector-482-483:assembleTrinoConnector",

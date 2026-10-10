@@ -20,7 +20,8 @@ Choose the package by your Trino server version first.
 | Trino server version | Connector package segment |
 |----------------------|---------------------------|
 | 469-472              | `trino-connector-469-472` |
-| 473-479              | `trino-connector-473-479` |
+| 473-477              | `trino-connector-473-477` |
+| 478-479              | `trino-connector-478-479` |
 | 480                  | `trino-connector-480`     |
 | 481                  | `trino-connector-481`     |
 | 482-483              | `trino-connector-482-483` |

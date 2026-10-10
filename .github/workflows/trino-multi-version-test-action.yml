@@ -75,19 +75,19 @@ jobs:
         run: |
           trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
             --auto=all --auto_patch --trino_version=479 \
-            --trino_connector_dir=${{ env.CONNECTOR_DIR }}/trino-connector-473-479/build/libs
+            --trino_connector_dir=${{ env.CONNECTOR_DIR }}/trino-connector-478-479/build/libs
 
       - name: Test Trino 478
         run: |
           trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
             --auto=all --auto_patch --trino_version=478 \
-            --trino_connector_dir=${{ env.CONNECTOR_DIR }}/trino-connector-473-479/build/libs
+            --trino_connector_dir=${{ env.CONNECTOR_DIR }}/trino-connector-478-479/build/libs
 
       - name: Test Trino 473
         run: |
           trino-connector/integration-test/trino-test-tools/trino_integration_test.sh \
             --auto=all --auto_patch --trino_version=473 \
-            --trino_connector_dir=${{ env.CONNECTOR_DIR }}/trino-connector-473-479/build/libs
+            --trino_connector_dir=${{ env.CONNECTOR_DIR }}/trino-connector-473-477/build/libs
 
       - name: Test Trino 469
         run: |

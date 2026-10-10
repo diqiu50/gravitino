@@ -27,14 +27,16 @@ plugins {
   `maven-publish`
 }
 
-// This module supports Trino versions 473-479
+// This module supports Trino versions 473-477
 val minTrinoVersion = 473
-val maxTrinoVersion = 479
+val maxTrinoVersion = 477
 val otelSemconvVersion = "1.32.0"
 
 val trinoVersion = providers.gradleProperty("trinoVersion")
   .map { it.trim().toInt() }
-  .orElse(maxTrinoVersion)
+  // 477 itself has no published trino-memory/trino-testing artifact on Maven Central, so default
+  // to minTrinoVersion instead (matching the 469-472 module's default).
+  .orElse(minTrinoVersion)
   .get()
 
 // Validate version range
@@ -108,8 +110,6 @@ tasks.withType<Test>().configureEach {
   extensions
     .findByType(org.gradle.testing.jacoco.plugins.JacocoTaskExtension::class.java)
     ?.isEnabled = false
-  // Trino 479+ requires the JDK Vector API incubator module for SIMD block encoding.
-  jvmArgs("--add-modules=jdk.incubator.vector")
 }
 
 tasks {

@@ -87,7 +87,8 @@ dependencies {
 tasks.register("setupDependencies") {
   dependsOn(":bundles:aws-bundle:jar", ":bundles:iceberg-aws-bundle:jar")
   dependsOn(":trino-connector:trino-connector-469-472:copyLibs")
-  dependsOn(":trino-connector:trino-connector-473-479:copyLibs")
+  dependsOn(":trino-connector:trino-connector-473-477:copyLibs")
+  dependsOn(":trino-connector:trino-connector-478-479:copyLibs")
   dependsOn(":trino-connector:trino-connector-480:copyLibs")
   dependsOn(":trino-connector:trino-connector-481:copyLibs")
   dependsOn(":trino-connector:trino-connector-482-483:copyLibs")

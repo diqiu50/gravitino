@@ -45,19 +45,19 @@ import org.apache.gravitino.trino.connector.catalog.CatalogConnectorMetadataAdap
 import org.apache.gravitino.trino.connector.metadata.GravitinoColumn;
 
 /**
- * The Trino 478-479 metadata adapter; carries the table-execute overrides whose SPI signatures
+ * The Trino 473-477 metadata adapter; carries the table-execute overrides whose SPI signatures
  * differ across versions.
  */
-public class GravitinoMetadata479 extends GravitinoMetadata {
+public class GravitinoMetadata473 extends GravitinoMetadata {
 
   /**
-   * Constructs a new GravitinoMetadata479.
+   * Constructs a new GravitinoMetadata473.
    *
    * @param catalogConnectorMetadata the catalog connector metadata
    * @param metadataAdapter the catalog connector metadata adapter
    * @param internalMetadata the internal connector metadata
    */
-  public GravitinoMetadata479(
+  public GravitinoMetadata473(
       CatalogConnectorMetadata catalogConnectorMetadata,
       CatalogConnectorMetadataAdapter metadataAdapter,
       ConnectorMetadata internalMetadata) {
@@ -110,15 +110,10 @@ public class GravitinoMetadata479 extends GravitinoMetadata {
         session, GravitinoHandle.unWrap(tableExecuteHandle), fragments, tableExecuteState);
   }
 
-  // Known inherited limitation: ConnectorMetadata.executeTableExecute changed from void to
-  // Map<String,Long> in Trino 478, and the two descriptors cannot coexist in one class, so on Trino
-  // 473-477 runtimes engine dispatch resolves to the SPI default no-op and table-execute
-  // (procedures) are silently skipped. Same behavior as the previous 473-478 segment module.
   @Override
-  public Map<String, Long> executeTableExecute(
+  public void executeTableExecute(
       ConnectorSession session, ConnectorTableExecuteHandle tableExecuteHandle) {
-    return internalMetadata.executeTableExecute(
-        session, GravitinoHandle.unWrap(tableExecuteHandle));
+    internalMetadata.executeTableExecute(session, GravitinoHandle.unWrap(tableExecuteHandle));
   }
 
   @Override
