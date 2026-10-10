@@ -31,7 +31,6 @@ import io.trino.spi.connector.Connector;
 import io.trino.spi.connector.ConnectorContext;
 import io.trino.spi.connector.ConnectorFactory;
 import java.io.File;
-import java.lang.reflect.Constructor;
 import java.net.URL;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -205,25 +204,14 @@ public class GravitinoConnectorPluginManager {
   }
 
   /**
-   * Instantiates a Trino {@code PluginClassLoader} across supported Trino versions. Trino 440-481
-   * expose {@code PluginClassLoader(String, List<URL>, ClassLoader, List<String> spiPackages)};
-   * Trino 482 added a second package-category list, {@code PluginClassLoader(String, List<URL>,
-   * ClassLoader, List<String> spiPackages, List<String> spiModules)}. The two constructors are
-   * probed in order so the shared source works against every Trino runtime; on Trino 482+ the
-   * second list is empty, matching the earlier single-list behavior.
+   * Instantiates a Trino {@code PluginClassLoader}. The constructor signature varies across Trino
+   * SPI shapes, so the actual reflective call lives in {@link PluginClassLoaderFactory}, which has
+   * one implementation per shape.
    */
   private Object newPluginClassLoader(
       String classLoaderName, List<URL> urls, List<String> spiPackages) throws Exception {
-    try {
-      Constructor<?> constructor =
-          pluginLoaderClass.getConstructor(String.class, List.class, ClassLoader.class, List.class);
-      return constructor.newInstance(classLoaderName, urls, appClassloader, spiPackages);
-    } catch (NoSuchMethodException ignored) {
-      Constructor<?> constructor =
-          pluginLoaderClass.getConstructor(
-              String.class, List.class, ClassLoader.class, List.class, List.class);
-      return constructor.newInstance(classLoaderName, urls, appClassloader, spiPackages, List.of());
-    }
+    return PluginClassLoaderFactory.create(
+        pluginLoaderClass, classLoaderName, urls, appClassloader, spiPackages);
   }
 
   private void loadPluginsFromBundle() {

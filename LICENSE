@@ -308,8 +308,7 @@
    ./trino-connector/src/common/main/java/org/apache/gravitino/trino/connector/util/json/AbstractTypedJacksonModule.java
    ./trino-connector/src/common/main/java/org/apache/gravitino/trino/connector/util/json/BlockJsonSerde.java
    ./trino-connector/src/common/main/java/org/apache/gravitino/trino/connector/util/json/TypeDeserializer.java
-   ./trino-connector/src/common-469-479/main/java/org/apache/gravitino/trino/connector/util/json/TypeSignatureDeserializer.java
-   ./trino-connector/src/common-480-481/main/java/org/apache/gravitino/trino/connector/util/json/TypeSignatureDeserializer.java
+   ./trino-connector/src/common-469-481/main/java/org/apache/gravitino/trino/connector/util/json/TypeSignatureDeserializer.java
 
    Apache Arrow
    ./dev/ci/util_free_space.sh

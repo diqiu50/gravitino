@@ -81,7 +81,7 @@ dependencies {
 
 sourceSets {
   main {
-    java.srcDirs("../src/common/main/java", "../src/common-482-483/main/java")
+    java.srcDirs("../src/common/main/java", "../src/common-480-483/main/java", "../src/common-482-483/main/java")
   }
   test {
     java.srcDirs("../src/common/test/java", "../src/common-482-483/test/java")
