@@ -20,6 +20,7 @@ package org.apache.gravitino.server.web.rest;
 
 import com.codahale.metrics.annotation.ResponseMetered;
 import com.codahale.metrics.annotation.Timed;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Locale;
 import javax.inject.Inject;
@@ -52,8 +53,6 @@ import org.apache.gravitino.dto.responses.SemanticModelResponse;
 import org.apache.gravitino.dto.util.DTOConverters;
 import org.apache.gravitino.metrics.MetricNames;
 import org.apache.gravitino.semantic.OssieDocument;
-import org.apache.gravitino.semantic.OssieDocumentConverter;
-import org.apache.gravitino.semantic.OssieDocumentConverter.ImportedSemanticModel;
 import org.apache.gravitino.semantic.OssieFormat;
 import org.apache.gravitino.semantic.SemanticModel;
 import org.apache.gravitino.semantic.SemanticModelChange;
@@ -239,14 +238,11 @@ public class SemanticModelOperations {
                 MediaType.APPLICATION_JSON_TYPE.isCompatible(headers.getMediaType())
                     ? OssieDocument.json(document)
                     : OssieDocument.yaml(document);
-            ImportedSemanticModel imported = OssieDocumentConverter.importDocument(ossieDocument);
-            sourceValidator.validate(metalake, imported.definition());
             SemanticModel semanticModel =
-                dispatcher.createSemanticModel(
-                    NameIdentifierUtil.ofSemanticModel(metalake, catalog, schema, imported.name()),
-                    imported.comment(),
-                    imported.definition(),
-                    imported.properties());
+                dispatcher.importOssieDocument(
+                    NamespaceUtil.ofSemanticModel(metalake, catalog, schema),
+                    ossieDocument,
+                    definition -> sourceValidator.validate(metalake, definition));
             LOG.info(
                 "Apache Ossie Semantic Model imported: {}.{}.{}.{}",
                 metalake,
@@ -354,6 +350,10 @@ public class SemanticModelOperations {
                 request.getUpdates().stream()
                     .map(SemanticModelUpdateRequest::semanticModelChange)
                     .toArray(SemanticModelChange[]::new);
+            if (Arrays.stream(changes)
+                .anyMatch(change -> change instanceof SemanticModelChange.ReplaceDefinition)) {
+              dispatcher.loadSemanticModel(ident);
+            }
             for (SemanticModelChange change : changes) {
               if (change instanceof SemanticModelChange.ReplaceDefinition) {
                 sourceValidator.validate(
