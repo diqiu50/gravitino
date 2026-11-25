@@ -139,10 +139,11 @@ under a catalog or schema, because an article can explain data from several cata
 
 ```text
 KnowledgeBaseArticle {
-  name, title, body: { format: MARKDOWN | HTML, content },
+  name, title,
   status: DRAFT | PUBLISHED | DEPRECATED, domains[], comment?, synonyms[],
   sourceReference?, properties, audit_info, revisionToken
 }
+ArticleContent { body: { format: MARKDOWN | HTML, content }, revisionToken }
 ArticleBinding { articleId, targetType, targetId, audit_info }
 ArticleDomain  { articleId, domainId, audit_info }
 ```
@@ -222,7 +223,7 @@ on write, removing scripts, active elements and event-handler attributes while p
 formatting. For both formats, sanitize the final rendered HTML before display and use a URL
 protocol allowlist that excludes `javascript:`, `data:` and encoded variants.
 
-Responses, including MCP, return the stored body and format. Compare stored values for no-op
+The content endpoint returns the stored body and format. Compare stored values for no-op
 detection. Process body input only on create or `updateBody`; unrelated edits and library upgrades
 do not rewrite stored bodies.
 
@@ -411,7 +412,7 @@ operations.
 
 | Operation                         | Required authority                                                          |
 | --------------------------------- | --------------------------------------------------------------------------- |
-| List and load                     | VIEW; drafts also require current owner with CREATE, or MANAGE              |
+| List, load metadata, read content | VIEW; drafts also require current owner with CREATE, or MANAGE              |
 | Create                            | CREATE                                                                      |
 | Edit, set status, change bindings | Current owner with CREATE, or MANAGE                                        |
 | Change Domains in create or alter | Article create or edit authority and `MANAGE_DOMAIN` on each changed Domain |
@@ -499,8 +500,9 @@ can overwrite intervening changes to the same field. Gravitino cannot restore an
 
 ### Read consistency
 
-Read the Article identity, status, metadata, body when requested, and visible relation previews
-from one database snapshot. Use the Article state in that snapshot for visibility filtering.
+Read Article metadata and visible relation previews from one database snapshot. A separate
+content read returns the stored body and its revision from its own snapshot. Use the Article
+state in each snapshot for visibility filtering.
 Use the same snapshot boundary for direct reads, Article and Domain member list pages,
 and binding pages. Use a single SQL statement when it can read the required data together.
 For multiple queries, use the shared
@@ -529,7 +531,8 @@ create, load, alter, delete and binding calls. Percent-encoded length is not the
 | ------------------------------------------------ | ----------------------------------------------------------- | ----------------------- | -------------------------------------------------- |
 | `POST /kb-articles`                              | Create fields below                                         | `article`               | Create current content and initial relations       |
 | `GET /kb-articles`                               | List filters below                                          | `articles`, `hasMore`   | Read visible summaries only                        |
-| `GET /kb-articles/{article}`                     | Binding `limit`, `offset`                                   | `article`               | Read current content with bounded binding previews |
+| `GET /kb-articles/{article}`                     | Binding `limit`, `offset`                                   | `article`               | Read metadata with bounded binding previews        |
+| `GET /kb-articles/{article}/content`             | None                                                        | `body`, `revisionToken` | Read the stored body and its editing token         |
 | `PUT /kb-articles/{article}`                     | `updates` with optional `expectedRevision`                  | `article`               | Apply Article and binding changes atomically       |
 | `DELETE /kb-articles/{article}`                  | No body                                                     | `DropResponse` (`200`)  | Soft-delete Article and related rows atomically    |
 | `DELETE /kb-articles/{article}/domains/{domain}` | No body                                                     | `code: 0` (`200`)       | Detach the Article from this Domain                |
@@ -561,7 +564,7 @@ An `ArticleSummary` embeds at most 20 readable Term entries and `termsHasMore`. 
 response embeds Term and object previews with `termsHasMore` and `objectsHasMore`. A load accepts
 `limit` and `offset` for both binding sets, defaulting to 20 and 0, with the same maximum of 1,000.
 These parameters page bindings, not the body. Each binding set can also be paged independently
-through its GET endpoint. Create and alter return the full Article with the default binding
+through its GET endpoint. Create and alter return Article metadata with the default binding
 previews, including after an alter that changes only bindings.
 
 #### Create and alter
@@ -603,11 +606,13 @@ fields in [Data model](#data-model), plus the bounded binding previews described
 Term entries contain name and current status; object entries use `ArticleObjectIdentifier`.
 Resolve Owner information through the existing Owner model. When no Owner relation exists,
 `owner` is `null`. `audit_info` follows the standard AuditInfo DTO. These responses expose
-current content only.
+current metadata and bindings. Fetch the body separately with `GET /kb-articles/{article}/content`.
 
-The full `article` includes an opaque string `revisionToken` from the same snapshot as its content.
+The full `article` includes an opaque string `revisionToken` from the same snapshot as its metadata.
 The token identifies the metalake, the stable Article ID and its current revision. Summary
-and binding-page responses omit it.
+and binding-page responses omit it. The content endpoint applies the same Article visibility check
+and reads the body and token from one snapshot. Each request has its own snapshot. Clients that
+combine metadata and content compare both tokens and reload if they differ.
 
 Alter follows the existing `updates` convention. Supported changes are `updateTitle`,
 `updateBody`, `updateDomains`, `updateStatus`, `updateComment`, `updateSynonyms`,
@@ -772,6 +777,7 @@ The operations are:
 KnowledgeBaseArticleOperations
   listArticles(filter): ArticlePage
   loadArticle(name, limit = 20, offset = 0): KnowledgeBaseArticle
+  getArticleContent(name): ArticleContent
   createArticle(name?, title, body, domains?, status?, comment?, synonyms?,
                 sourceReference?, properties?, terms?, objects?): KnowledgeBaseArticle
   alterArticle(name, changes, expectedRevision?): KnowledgeBaseArticle
@@ -823,8 +829,9 @@ Tools use the existing MCP credential handling for REST calls:
 
 All modes return only `PUBLISHED` articles, including direct `get_kb_article`. A privileged
 principal does not cause a draft or deprecated root to bypass that filter. Root status checks and
-returned content come from the same read snapshot. Authorization errors must not trigger an
-unfiltered or more privileged retry.
+returned content must describe the same Article revision. When composing metadata and content
+from separate REST calls, compare their tokens before returning either result. Authorization
+errors must not trigger an unfiltered or more privileged retry.
 
 When the Term or asset is known, filter the Article list by that target. Otherwise, discover
 relevant Domains and browse bounded summary pages without `q`, then load selected articles with
@@ -833,7 +840,7 @@ needed. Avoid defaulting to a knowledge-base-wide body
 LIKE scan or automatically broadening an empty result into one. This is retrieval guidance for
 agents; the simple REST search contract has no additional parameter or mandatory Domain check.
 
-The Article API returns the complete stored body with its `format`. How tool output is supplied
+The content endpoint returns the complete stored body with its `format`. How tool output is supplied
 to model APIs, including content length and context management, is an MCP implementation concern.
 It does not change Article source storage or editing reads. Do not render the source body or
 convert HTML to Markdown.
@@ -950,7 +957,8 @@ Storage and lifecycle operations preserve the following invariants:
 
 1. **Create, edit and read**: pause a VIEW-only reader after it reads a published Article and
    before it loads bindings. In another session, save a new body, add a binding and set the
-   Article to `DRAFT` in one commit. The paused read returns only the old body and bindings.
+   Article to `DRAFT` in one commit. The paused metadata read returns the old bindings and token.
+   A content read that started in the old snapshot returns the old body and token.
    A subsequent direct read returns `404`. Repeat for list previews, where a subsequent list
    request omits the draft.
 2. **Draft, publish, deprecate and delete**: an author can change status directly. Visibility
@@ -1044,7 +1052,7 @@ OpenAPI definitions and validation with `./gradlew :docs:build`.
 ### Group C: REST and events
 
 - [ ] **T7. Add Article REST and OpenAPI** (`common/`, `server/`, `docs/open-api/`). Implement all
-      current-resource routes, Domain detach, binding reads, list target filters, envelopes,
+      metadata and content routes, Domain detach, binding reads, list target filters, envelopes,
       structured identifiers, error mapping, bounded offset pages/previews and conditional alters.
       For **T7.2**, verify REST error mappings and that Article DELETE returns `dropped=false`
       on retry or for a hidden draft.
